@@ -40,7 +40,7 @@ from omni.isaac.core.articulations import ArticulationView
 
 from omni.isaac.core.utils.torch.rotations import *
 
-from .olympus_spring import OlympusSpring
+from utils.olympus_spring import OlympusSpring
 
 from omni.isaac.core.utils.types import ArticulationAction, ArticulationActions
 

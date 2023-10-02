@@ -84,7 +84,7 @@ class RLGTrainer():
         })
 
 
-@hydra.main(config_name="config", config_path="../cfg")
+@hydra.main(config_name="config", config_path="/Olympus-ws/walker/omniisaacgymenvs/cfg")
 def parse_hydra_configs(cfg: DictConfig):
 
     time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -111,14 +111,12 @@ def parse_hydra_configs(cfg: DictConfig):
     cfg.seed = set_seed(cfg.seed, torch_deterministic=cfg.torch_deterministic)
     cfg_dict['seed'] = cfg.seed
 
-    # task = initialize_task(cfg_dict, env)
     #################################################################
     # Initialize task (Tarek)
     #################################################################
-    from olympus import OlympusTask
+    from RL.olympus import OlympusTask
     from omniisaacgymenvs.utils.config_utils.sim_config import SimConfig
     sim_config = SimConfig(cfg_dict)
-    cfg = sim_config.config
     task = OlympusTask(name="Olympus",sim_config=sim_config, env=env)
     env.set_task(
         task=task,
