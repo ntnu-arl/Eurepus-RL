@@ -53,7 +53,7 @@ wandb_project: 'omniisaacgymenvs'
 
 # set default task and default training config based on task
 defaults:
-  - task: Cartpole
+  - task: Olympus
   - train: ${task}PPO
   - hydra/job_logging: disabled
 
