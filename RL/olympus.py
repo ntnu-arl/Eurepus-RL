@@ -47,6 +47,8 @@ from omni.isaac.core.utils.types import ArticulationAction, ArticulationActions
 import numpy as np
 import torch
 import math
+import random #angular momentum testing
+
 
 class OlympusTask(RLTask):
     def __init__(self, name, sim_config, env, offset=None) -> None:
@@ -401,9 +403,10 @@ class OlympusTask(RLTask):
             self.olympus_dof_upper_limits,
         )
 
-        momentum_targets = torch.ones_like(current_targets) * self.momentum_indx
+        momentum_targets = torch.rand_like(current_targets)
+        momentum_targets = tensor_clamp(momentum_targets,self.olympus_dof_lower_limits, self.olympus_dof_upper_limits, )
         self._olympusses.set_joint_position_targets(momentum_targets, indices)
-        self.momentum_indx += 0.1
+        # self.momentum_indx += random.uniform(-0.1, 0.1)
         # self._olympusses.set_joint_position_targets(self.current_targets, indices)
 
 
