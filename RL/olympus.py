@@ -48,7 +48,6 @@ import numpy as np
 import torch
 import math
 
-
 class OlympusTask(RLTask):
     def __init__(self, name, sim_config, env, offset=None) -> None:
         self._sim_config = sim_config
@@ -160,6 +159,8 @@ class OlympusTask(RLTask):
         )
 
         RLTask.__init__(self, name, env)
+
+        self.momentum_indx = 0 # conservation of momentum testing
 
         return
 
@@ -400,7 +401,10 @@ class OlympusTask(RLTask):
             self.olympus_dof_upper_limits,
         )
 
-        self._olympusses.set_joint_position_targets(self.current_targets, indices)
+        momentum_targets = torch.ones_like(current_targets) * self.momentum_indx
+        self._olympusses.set_joint_position_targets(momentum_targets, indices)
+        self.momentum_indx += 0.1
+        # self._olympusses.set_joint_position_targets(self.current_targets, indices)
 
 
         spring_force_FL = self.spring_FL.forward()
