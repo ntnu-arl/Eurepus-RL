@@ -41,6 +41,7 @@ from omni.isaac.core.articulations import ArticulationView
 from omni.isaac.core.utils.torch.rotations import *
 
 from utils.olympus_spring import OlympusSpring
+from utils.olympus_logger import OlympusLogger
 
 from omni.isaac.core.utils.types import ArticulationAction, ArticulationActions
 
@@ -125,22 +126,6 @@ class OlympusTask(RLTask):
         self._num_actions = 12
         self._num_articulated_joints = 20
 
-
-        # self.actuated_name2idx = {
-        #     "LateralHip_FR": 2,
-        #     "LateralHip_FL": 6,
-        #     "LateralHip_BR": 5,
-        #     "LateralHip_BL": 4,
-        #     "FrontTransversalHip_FR": 1,
-        #     "FrontTransversalHip_FL": 12,
-        #     "FrontTransversalHip_BR": 11,
-        #     "FrontTransversalHip_BL": 9,
-        #     "BackTransversalHip_FR": 3,
-        #     "BackTransversalHip_FL": 13,
-        #     "BackTransversalHip_BR": 10,
-        #     "BackTransversalHip_BL": 8,
-        # }
-        # New for revolute joint usd
         self.actuated_name2idx = {
             "LateralHip_FR": 0,
             "LateralHip_FL": 3,
@@ -163,6 +148,8 @@ class OlympusTask(RLTask):
         RLTask.__init__(self, name, env)
 
         self.momentum_indx = 0 # conservation of momentum testing
+        self._obs_count = 0
+        self._logger = OlympusLogger()
 
         return
 
@@ -350,8 +337,6 @@ class OlympusTask(RLTask):
             device=self.commands.device,
         )
 
-        
-
         obs = torch.cat(
             (
                 base_lin_vel,
@@ -375,6 +360,14 @@ class OlympusTask(RLTask):
         self.obs_buf[:] = obs
 
         observations = {self._olympusses.name: {"obs_buf": self.obs_buf}}
+
+        ## LOGGING
+        self._logger.add_data(0.0, 0.0, self._olympusses)
+        if (self._obs_count % 100 == 0):
+            print("Saving log to olympus_logs.json")
+            self._logger.save_to_json("/Olympus-ws/in-air-stabilization/logs/olympus_logs.json")
+        self._obs_count += 1
+
         return observations
 
     def pre_physics_step(self, actions) -> None:
@@ -403,11 +396,11 @@ class OlympusTask(RLTask):
             self.olympus_dof_upper_limits,
         )
 
-        momentum_targets = torch.rand_like(current_targets)
-        momentum_targets = tensor_clamp(momentum_targets,self.olympus_dof_lower_limits, self.olympus_dof_upper_limits, )
-        self._olympusses.set_joint_position_targets(momentum_targets, indices)
+        # random_targets = torch.rand_like(current_targets) # For random targets
+        # momentum_targets = tensor_clamp(random_targets,self.olympus_dof_lower_limits, self.olympus_dof_upper_limits, )
+        # self._olympusses.set_joint_position_targets(momentum_targets, indices)
         # self.momentum_indx += random.uniform(-0.1, 0.1)
-        # self._olympusses.set_joint_position_targets(self.current_targets, indices)
+        self._olympusses.set_joint_position_targets(self.current_targets, indices)
 
 
         spring_force_FL = self.spring_FL.forward()
