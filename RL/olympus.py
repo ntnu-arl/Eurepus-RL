@@ -29,8 +29,8 @@
 
 import array
 from omniisaacgymenvs.tasks.base.rl_task import RLTask
-from omniisaacgymenvs.robots.articulations.olympus import Olympus
-from omniisaacgymenvs.robots.articulations.views.olympus_view import OlympusView
+# from omniisaacgymenvs.robots.articulations.olympus import Olympus
+# from omniisaacgymenvs.robots.articulations.views.olympus_view import OlympusView
 from omniisaacgymenvs.tasks.utils.usd_utils import set_drive
 
 from omni.isaac.core.utils.prims import get_prim_at_path
@@ -40,6 +40,8 @@ from omni.isaac.core.articulations import ArticulationView
 
 from omni.isaac.core.utils.torch.rotations import *
 
+from Robot.olympus import Olympus
+from Robot.olympus_view import OlympusView
 from utils.olympus_spring import OlympusSpring
 from utils.olympus_logger import OlympusLogger
 
@@ -127,18 +129,18 @@ class OlympusTask(RLTask):
         self._num_articulated_joints = 20
 
         self.actuated_name2idx = {
-            "LateralHip_FR": 0,
-            "LateralHip_FL": 3,
-            "LateralHip_BR": 2,
-            "LateralHip_BL": 1,
-            "FrontTransversalHip_FR": 4,
-            "FrontTransversalHip_FL": 10,
-            "FrontTransversalHip_BR": 8,
-            "FrontTransversalHip_BL": 6,
-            "BackTransversalHip_FR": 5,
-            "BackTransversalHip_FL": 11,
-            "BackTransversalHip_BR": 9,
-            "BackTransversalHip_BL": 7,
+            "LateralMotor_FR": 0,
+            "LateralMotor_FL": 3,
+            "LateralMotor_BR": 2,
+            "LateralMotor_BL": 1,
+            "FrontTransversalMotor_FR": 4,
+            "FrontTransversalMotor_FL": 10,
+            "FrontTransversalMotor_BR": 8,
+            "FrontTransversalMotor_BL": 6,
+            "BackTransversalMotor_FR": 5,
+            "BackTransversalMotor_FL": 11,
+            "BackTransversalMotor_BR": 9,
+            "BackTransversalMotor_BL": 7,
         }
 
         self.actuated_idx = torch.tensor(
@@ -157,7 +159,7 @@ class OlympusTask(RLTask):
         self.get_olympus()
         super().set_up_scene(scene)
         self._olympusses = OlympusView(
-            prim_paths_expr="/World/envs/.*/Quadruped/Body", name="olympusview"
+            prim_paths_expr="/World/envs/.*/Olympus/Body", name="olympusview"
         )
         scene.add(self._olympusses)
         scene.add(self._olympusses._knees)
@@ -253,28 +255,26 @@ class OlympusTask(RLTask):
     def get_olympus(self):
 
         olympus = Olympus(
-            prim_path=self.default_zero_env_path + "/Quadruped",
-            usd_path="/Olympus-ws/Olympus-USD/Olympus/Simplified/quadruped_simplified_meshes_instanceable.usd",
+            prim_path=self.default_zero_env_path + "/Olympus",
+            usd_path="/Olympus-ws/Olympus-USD/Olympus/v2/olympus_v2.usd",
             name="Olympus",
             translation=self._olympus_translation,
         )
-
 
         self._sim_config.apply_articulation_settings(
             "Olympus",
             get_prim_at_path(olympus.prim_path),
             self._sim_config.parse_actor_config("Olympus"),
         )
-
         # Configure joint properties
         joint_paths = []
 
         for quadrant in ["FR", "FL", "BR", "BL"]:
             joint_paths.append(
-                f"MotorHousing_{quadrant}/LateralHip_{quadrant}"
+                f"Body/LateralMotor_{quadrant}"
             )
-            joint_paths.append(f"FrontThigh_{quadrant}/FrontTransversalHip_{quadrant}")
-            joint_paths.append(f"BackThigh_{quadrant}/BackTransversalHip_{quadrant}")
+            joint_paths.append(f"MotorHousing_{quadrant}/FrontTransversalMotor_{quadrant}")
+            joint_paths.append(f"MotorHousing_{quadrant}/BackTransversalMotor_{quadrant}")
         for joint_path in joint_paths:
             set_drive(
                 f"{olympus.prim_path}/{joint_path}",
@@ -285,21 +285,18 @@ class OlympusTask(RLTask):
                 self.Kd,
                 self.max_torque,
             )
-
         self.default_articulated_joints_pos = torch.zeros(
             (self.num_envs, self._num_articulated_joints),
             dtype=torch.float,
             device=self.device,
             requires_grad=False,
         )
-
         self.default_actuated_joints_pos = torch.zeros(
             (self.num_envs, self._num_actions),
             dtype=torch.float,
             device=self.device,
             requires_grad=False,
         )
-
         dof_names = olympus.dof_names
         for i in range(self._num_articulated_joints):
             name = dof_names[i]
@@ -478,6 +475,9 @@ class OlympusTask(RLTask):
         dof_limits = self._olympusses.get_dof_limits()
         self.olympus_dof_lower_limits = dof_limits[0, :, 0].to(device=self._device)
         self.olympus_dof_upper_limits = dof_limits[0, :, 1].to(device=self._device)
+        # self.olympus_dof_upper_limits = torch.tensor([0,0,0,0,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14], device='cuda:0')
+        # self.olympus_dof_lower_limits = torch.zeros(20, device='cuda:0')
+
 
         self.commands = torch.zeros(
             self._num_envs,
