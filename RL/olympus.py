@@ -27,31 +27,18 @@
 #  IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import array
+import torch
+from torch.distributions import Uniform
+
 from omniisaacgymenvs.tasks.base.rl_task import RLTask
-# from omniisaacgymenvs.robots.articulations.olympus import Olympus
-# from omniisaacgymenvs.robots.articulations.views.olympus_view import OlympusView
 from omniisaacgymenvs.tasks.utils.usd_utils import set_drive
 
+from omni.isaac.core.utils.torch.rotations import quat_rotate, quat_rotate_inverse, get_euler_xyz, quat_diff_rad,quat_from_euler_xyz
+from omni.isaac.core.utils.types import ArticulationAction
 from omni.isaac.core.utils.prims import get_prim_at_path
-from omni.isaac.core.prims import XFormPrim , XFormPrimView
-from omni.isaac.core.articulations import ArticulationView
 
-
-from omni.isaac.core.utils.torch.rotations import *
-
-from Robot.olympus import Olympus
-from Robot.olympus_view import OlympusView
-from utils.olympus_spring import OlympusSpring
+from Robot import Olympus, OlympusView, OlympusSpring
 from utils.olympus_logger import OlympusLogger
-
-from omni.isaac.core.utils.types import ArticulationAction, ArticulationActions
-
-import numpy as np
-import torch
-import math
-import random #angular momentum testing
-
 
 class OlympusTask(RLTask):
     def __init__(self, name, sim_config, env, offset=None) -> None:
@@ -59,53 +46,30 @@ class OlympusTask(RLTask):
         self._cfg = sim_config.config
         self._task_cfg = sim_config.task_config
 
-        # normalization
-        self.lin_vel_scale = self._task_cfg["env"]["learn"]["linearVelocityScale"]
-        self.ang_vel_scale = self._task_cfg["env"]["learn"]["angularVelocityScale"]
-        self.dof_pos_scale = self._task_cfg["env"]["learn"]["dofPositionScale"]
-        self.dof_vel_scale = self._task_cfg["env"]["learn"]["dofVelocityScale"]
-        self.action_scale = self._task_cfg["env"]["control"]["actionScale"]
-
         # reward scales
         self.rew_scales = {}
-        self.rew_scales["lin_vel_xy"] = self._task_cfg["env"]["learn"][
-            "linearVelocityXYRewardScale"
+        self.rew_scales["r_orient"] = self._task_cfg["env"]["learn"][
+            "rOrientRewardScale"
         ]
-        self.rew_scales["ang_vel_z"] = self._task_cfg["env"]["learn"][
-            "angularVelocityZRewardScale"
+        self.rew_scales["r_base_acc"] = self._task_cfg["env"]["learn"][
+            "rBaseAccRewardScale"
         ]
-        self.rew_scales["lin_vel_z"] = self._task_cfg["env"]["learn"][
-            "linearVelocityZRewardScale"
+        self.rew_scales["r_action_clip"] = self._task_cfg["env"]["learn"][
+            "rActionClipRewardScale"
         ]
-        self.rew_scales["joint_acc"] = self._task_cfg["env"]["learn"][
-            "jointAccRewardScale"
+        self.rew_scales["r_torque_clip"] = self._task_cfg["env"]["learn"][
+            "rTorqueClipRewardScale"
         ]
-        self.rew_scales["action_rate"] = self._task_cfg["env"]["learn"][
-            "actionRateRewardScale"
-        ]
-        self.rew_scales["cosmetic"] = self._task_cfg["env"]["learn"][
-            "cosmeticRewardScale"
-        ]
-
-        # command ranges
-        self.command_x_range = self._task_cfg["env"]["randomCommandVelocityRanges"][
-            "linear_x"
-        ]
-        self.command_y_range = self._task_cfg["env"]["randomCommandVelocityRanges"][
-            "linear_y"
-        ]
-        self.command_yaw_range = self._task_cfg["env"]["randomCommandVelocityRanges"][
-            "yaw"
+        self.rew_scales["total"] = self._task_cfg["env"]["learn"][
+            "rewardScale"
         ]
 
         # base init state
-        pos = self._task_cfg["env"]["baseInitState"]["pos"]
-        rot = self._task_cfg["env"]["baseInitState"]["rot"]
+        pos   = self._task_cfg["env"]["baseInitState"]["pos"]
+        rot   = self._task_cfg["env"]["baseInitState"]["rot"]
         v_lin = self._task_cfg["env"]["baseInitState"]["vLinear"]
         v_ang = self._task_cfg["env"]["baseInitState"]["vAngular"]
-        state = pos + rot + v_lin + v_ang
-
-        self.base_init_state = state
+        self.base_init_state = pos + rot + v_lin + v_ang
 
         # default joint positions
         self.named_default_joint_angles = self._task_cfg["env"]["defaultJointAngles"]
@@ -116,15 +80,18 @@ class OlympusTask(RLTask):
         self.max_episode_length = int(self.max_episode_length_s / self.dt + 0.5)
         self.Kp = self._task_cfg["env"]["control"]["stiffness"]
         self.Kd = self._task_cfg["env"]["control"]["damping"]
-        self.max_torque = self._task_cfg["env"]["control"]["maxTorque"]
+        self.max_torque = self._task_cfg["env"]["control"]["max_torque"]
 
-        for key in self.rew_scales.keys():
-            self.rew_scales[key] *= self.dt
+        # TODO: 
+        # Do we need to scale our rewards? 
+
+        # for key in self.rew_scales.keys():
+        #     self.rew_scales[key] *= self.dt
 
         self._num_envs = self._task_cfg["env"]["numEnvs"]
         self._olympus_translation = torch.tensor(self._task_cfg["env"]["baseInitState"]["pos"])
         self._env_spacing = self._task_cfg["env"]["envSpacing"]
-        self._num_observations = 48
+        self._num_observations = 31
         self._num_actions = 12
         self._num_articulated_joints = 20
 
@@ -149,10 +116,19 @@ class OlympusTask(RLTask):
 
         RLTask.__init__(self, name, env)
 
-        self.momentum_indx = 0 # conservation of momentum testing
+        # Random initial euler angles after reset
+        init_euler_min = -torch.tensor([torch.pi,torch.pi,torch.pi],device=self._device)
+        init_euler_max = torch.tensor([torch.pi,torch.pi,torch.pi],device=self._device)
+
+        self.roll_sampeler = Uniform(init_euler_min[0],init_euler_max[0])
+        self.pitch_sampeler = Uniform(init_euler_min[1],init_euler_max[1])
+        self.yaw_sampeler = Uniform(init_euler_min[2],init_euler_max[2])
+
+
+
+
         self._obs_count = 0
         self._logger = OlympusLogger()
-
         return
 
     def set_up_scene(self, scene) -> None:
@@ -161,6 +137,7 @@ class OlympusTask(RLTask):
         self._olympusses = OlympusView(
             prim_paths_expr="/World/envs/.*/Olympus/Body", name="olympusview"
         )
+
         scene.add(self._olympusses)
         scene.add(self._olympusses._knees)
         scene.add(self._olympusses._base)
@@ -188,75 +165,13 @@ class OlympusTask(RLTask):
         scene.add(self._olympusses.BackMotor_BR   )
         scene.add(self._olympusses.FrontKnee_BR   )
         scene.add(self._olympusses.BackKnee_BR    )
-        
-        # Dof2Idx = {}
-        # for indx, dof in enumerate(self._olympusses.dof_names):
-        #     Dof2Idx[dof] = indx
-
-        self.spring_FL = OlympusSpring(
-            k               = 400,
-            equality_dist   = 0.2,
-            front_motor_idx = 10,
-            back_motor_idx  = 11,
-            front_knee_idx  = 18,
-            back_knee_idx   = 19,
-            motor_housing   = self._olympusses.MotorHousing_FL,
-            front_motor     = self._olympusses.FrontMotor_FL,  
-            back_motor      = self._olympusses.BackMotor_FL,   
-            front_knee      = self._olympusses.FrontKnee_FL,   
-            back_knee       = self._olympusses.BackKnee_FL,    
-        )
-
-        self.spring_FR = OlympusSpring(
-            k               = 400,
-            equality_dist   = 0.2,
-            front_motor_idx = 4,
-            back_motor_idx  = 5,
-            front_knee_idx  = 12,
-            back_knee_idx   = 13,
-            motor_housing   = self._olympusses.MotorHousing_FR,
-            front_motor     = self._olympusses.FrontMotor_FR,  
-            back_motor      = self._olympusses.BackMotor_FR,   
-            front_knee      = self._olympusses.FrontKnee_FR,   
-            back_knee       = self._olympusses.BackKnee_FR,    
-        )
-
-        self.spring_BL = OlympusSpring(
-            k               = 400,
-            equality_dist   = 0.2,
-            front_motor_idx = 6,
-            back_motor_idx  = 7,
-            front_knee_idx  = 14,
-            back_knee_idx   = 15,
-            motor_housing   = self._olympusses.MotorHousing_BL,
-            front_motor     = self._olympusses.FrontMotor_BL,  
-            back_motor      = self._olympusses.BackMotor_BL,   
-            front_knee      = self._olympusses.FrontKnee_BL,   
-            back_knee       = self._olympusses.BackKnee_BL,    
-        )
-
-        self.spring_BR = OlympusSpring(
-            k               = 400,
-            equality_dist   = 0.2,
-            front_motor_idx = 8,
-            back_motor_idx  = 9,
-            front_knee_idx  = 16,
-            back_knee_idx   = 17,
-            motor_housing   = self._olympusses.MotorHousing_BR,
-            front_motor     = self._olympusses.FrontMotor_BR,  
-            back_motor      = self._olympusses.BackMotor_BR,   
-            front_knee      = self._olympusses.FrontKnee_BR,   
-            back_knee       = self._olympusses.BackKnee_BR,    
-        )
-
-
         return
 
     def get_olympus(self):
 
         olympus = Olympus(
             prim_path=self.default_zero_env_path + "/Olympus",
-            usd_path="/Olympus-ws/Olympus-USD/Olympus/v2/olympus_v2.usd",
+            usd_path="c:/Users/Finn/OneDrive - NTNU/Dokumenter/TERMIN 9/Project/Olympus-USD/Olympus/v2/olympus_v2.usd",
             name="Olympus",
             translation=self._olympus_translation,
         )
@@ -305,196 +220,113 @@ class OlympusTask(RLTask):
         
 
     def get_observations(self) -> dict:
-        torso_position, torso_rotation = self._olympusses.get_world_poses(clone=False)
-        root_velocities = self._olympusses.get_velocities(clone=False)
-        dof_pos = self._olympusses.get_joint_positions(
+        motor_joint_pos = self._olympusses.get_joint_positions(
             clone=False, joint_indices=self.actuated_idx
         )
-        dof_vel = self._olympusses.get_joint_velocities(
+        motor_joint_vel = self._olympusses.get_joint_velocities(
             clone=False, joint_indices=self.actuated_idx
         )
 
-        velocity = root_velocities[:, 0:3]
+        root_velocities = self._olympusses.get_velocities(clone=False)
         ang_velocity = root_velocities[:, 3:6]
 
-        base_lin_vel = (
-            quat_rotate_inverse(torso_rotation, velocity) * self.lin_vel_scale
-        )
-        base_ang_vel = (
-            quat_rotate_inverse(torso_rotation, ang_velocity) * self.ang_vel_scale
-        )
-        projected_gravity = quat_rotate(torso_rotation, self.gravity_vec)
-        dof_pos_scaled = (
-            dof_pos - self.default_actuated_joints_pos
-        ) * self.dof_pos_scale
-
-        commands_scaled = self.commands * torch.tensor(
-            [self.lin_vel_scale, self.lin_vel_scale, self.ang_vel_scale],
-            requires_grad=False,
-            device=self.commands.device,
-        )
-
+        base_position, base_rotation = self._olympusses.get_world_poses(clone=False)
+        base_angular_vel = ang_velocity #quat_rotate_inverse(base_rotation, ang_velocity) -> choose to give ang vel in world frame
+        
         obs = torch.cat(
             (
-                base_lin_vel,
-                base_ang_vel,
-                projected_gravity,
-                commands_scaled,
-                dof_pos_scaled,
-                dof_vel * self.dof_vel_scale,
-                self.actions,
+                motor_joint_pos,
+                motor_joint_vel,
+                base_rotation,
+                base_angular_vel,
             ),
             dim=-1,
         )
 
-        # print a warning if any NaNs are detected
-        if torch.isnan(obs).any():
-            print("NaN detected in observation!")
-
-            # replace NaNs with zeros
-            obs[torch.isnan(obs)] = 0.0
-
-        self.obs_buf[:] = obs
+        self.obs_buf = obs.clone()
 
         observations = {self._olympusses.name: {"obs_buf": self.obs_buf}}
 
         ## LOGGING
-        self._logger.add_data(0.0, 0.0, self._olympusses)
-        if (self._obs_count % 100 == 0):
-            print("Saving log to olympus_logs.json")
-            self._logger.save_to_json("/Olympus-ws/in-air-stabilization/logs/olympus_logs.json")
-        self._obs_count += 1
+        #self._logger.add_data(0.0, 0.0, self._olympusses)
+        #if (self._obs_count % 100 == 0):
+        #    print("Saving log to olympus_logs.json")
+        #    self._logger.save_to_json("/Olympus-ws/in-air-stabilization/logs/olympus_logs.json")
+        #self._obs_count += 1
 
         return observations
 
     def pre_physics_step(self, actions) -> None:
+        # Check if simulation is running
         if not self._env._world.is_playing():
             return
 
+        # Handle resets
         reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
         if len(reset_env_ids) > 0:
             self.reset_idx(reset_env_ids)
-
-        indices = torch.arange(
-            self._olympusses.count, dtype=torch.int32, device=self._device
-        )
-        self.actions[:] = actions.clone().to(self._device)
-        current_targets = self.current_targets.clone()
-        current_targets[:, self.actuated_idx] += (
-            self.action_scale * self.actions * self.dt
-        )  # test if mask is necessary
-
-        # current_targets = (
-        #     self.current_targets[:,] + self.action_scale * self.actions * self.dt
-        # )
-        self.current_targets[:] = tensor_clamp(
-            current_targets,
-            self.olympus_dof_lower_limits,
-            self.olympus_dof_upper_limits,
-        )
-
-        # random_targets = torch.rand_like(current_targets) # For random targets
-        # momentum_targets = tensor_clamp(random_targets,self.olympus_dof_lower_limits, self.olympus_dof_upper_limits, )
-        # self._olympusses.set_joint_position_targets(momentum_targets, indices)
-        # self.momentum_indx += random.uniform(-0.1, 0.1)
-        self._olympusses.set_joint_position_targets(self.current_targets, indices)
-
-
-        spring_force_FL = self.spring_FL.forward()
-        spring_force_BL = self.spring_BL.forward()
-        spring_force_FR = self.spring_FR.forward()
-        spring_force_BR = self.spring_BR.forward()
-        spring_actions = ArticulationAction(
-            joint_efforts= torch.cat([spring_force_FL.joint_efforts, spring_force_BL.joint_efforts, spring_force_FR.joint_efforts, spring_force_BR.joint_efforts],dim=1),
-            joint_indices= torch.cat([spring_force_FL.joint_indices, spring_force_BL.joint_indices, spring_force_FR.joint_indices, spring_force_BR.joint_indices],dim=1)
-        )
-
-        self._olympusses.apply_action(spring_actions)
-
     
+        # Save and clamp actions
+        self.actions = actions.clone()
+        self.current_targets = actions.clamp(
+            self.olympus_motor_joint_lower_limits,
+            self.olympus_motor_joint_upper_limits,
+        )
 
+        # Set targets
+        self._olympusses.set_joint_position_targets(self.current_targets, joint_indices=self.actuated_idx)
 
+        # Step spring
+        # spring_actions = self.spring.forward()
+        # self._olympusses.apply_action(spring_actions)
+    
     def reset_idx(self, env_ids):
         num_resets = len(env_ids)
-        # randomize DOF velocities
-        velocities = torch_rand_float(
-            0.0, 0.0, (num_resets, self._olympusses.num_dof), device=self._device
-        )
+        # Set initial joint states
         dof_pos = self.default_articulated_joints_pos[env_ids]
-        dof_vel = velocities
+        dof_vel = torch.zeros(
+            (num_resets, self._olympusses.num_dof), device=self._device
+        )
 
-        self.current_targets[env_ids] = self.default_articulated_joints_pos[env_ids][:]
+        # Set initial motor targets
+        self.current_targets[env_ids] = self.default_actuated_joints_pos[env_ids][:]
 
+        # Set initial root states
         root_vel = torch.zeros((num_resets, 6), device=self._device)
-
-        # apply resets
+        rand_rot = quat_from_euler_xyz(
+            roll =self.roll_sampeler.rsample((num_resets,)),
+            pitch=self.pitch_sampeler.rsample((num_resets,)),
+            yaw  =self.yaw_sampeler.rsample((num_resets,))
+        )
+       
+        # Apply resets
         indices = env_ids.to(dtype=torch.int32)
         self._olympusses.set_joint_positions(dof_pos, indices)
         self._olympusses.set_joint_velocities(dof_vel, indices)
 
         self._olympusses.set_world_poses(
             self.initial_root_pos[env_ids].clone(),
-            self.initial_root_rot[env_ids].clone(),
+            rand_rot,
             indices,
         )
         self._olympusses.set_velocities(root_vel, indices)
 
-        self.commands_x[env_ids] = torch_rand_float(
-            self.command_x_range[0],
-            self.command_x_range[1],
-            (num_resets, 1),
-            device=self._device,
-        ).squeeze()
-        self.commands_y[env_ids] = torch_rand_float(
-            self.command_y_range[0],
-            self.command_y_range[1],
-            (num_resets, 1),
-            device=self._device,
-        ).squeeze()
-        self.commands_yaw[env_ids] = torch_rand_float(
-            self.command_yaw_range[0],
-            self.command_yaw_range[1],
-            (num_resets, 1),
-            device=self._device,
-        ).squeeze()
-
-        # bookkeeping
-        self.reset_buf[env_ids] = 0
-        self.progress_buf[env_ids] = 0
-        self.last_actions[env_ids] = 0.0
-        self.last_dof_vel[env_ids] = 0.0
+        # Bookkeeping
+        self.reset_buf[env_ids]             = 0
+        self.progress_buf[env_ids]          = 0
+        self.last_actions[env_ids]          = 0.0
+        self.last_motor_joint_vel[env_ids]  = 0.0
 
     def post_reset(self):
-        (
-            self.initial_root_pos,
-            self.initial_root_rot,
-        ) = self._olympusses.get_world_poses()
+        self.spring = OlympusSpring(k=400,olympus_view=self._olympusses,equality_dist=0.2,pulley_radius=0.02)
 
-        self.current_targets = self.default_articulated_joints_pos.clone()
+        self.initial_root_pos, self.initial_root_rot = self._olympusses.get_world_poses()
+        self.current_targets = self.default_actuated_joints_pos.clone()
 
         dof_limits = self._olympusses.get_dof_limits()
-        self.olympus_dof_lower_limits = dof_limits[0, :, 0].to(device=self._device)
-        self.olympus_dof_upper_limits = dof_limits[0, :, 1].to(device=self._device)
-        # self.olympus_dof_upper_limits = torch.tensor([0,0,0,0,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14], device='cuda:0')
-        # self.olympus_dof_lower_limits = torch.zeros(20, device='cuda:0')
+        self.olympus_motor_joint_lower_limits = dof_limits[0, self.actuated_idx, 0].to(device=self._device)
+        self.olympus_motor_joint_upper_limits = dof_limits[0, self.actuated_idx, 1].to(device=self._device)
 
-
-        self.commands = torch.zeros(
-            self._num_envs,
-            3,
-            dtype=torch.float,
-            device=self._device,
-            requires_grad=False,
-        )
-        self.commands_y = self.commands.view(self._num_envs, 3)[..., 1]
-        self.commands_x = self.commands.view(self._num_envs, 3)[..., 0]
-        self.commands_yaw = self.commands.view(self._num_envs, 3)[..., 2]
-
-        # initialize some data used later on
-        self.extras = {}
-        self.gravity_vec = torch.tensor([0.0, 0.0, -1.0], device=self._device).repeat(
-            (self._num_envs, 1)
-        )
         self.actions = torch.zeros(
             self._num_envs,
             self.num_actions,
@@ -502,15 +334,20 @@ class OlympusTask(RLTask):
             device=self._device,
             requires_grad=False,
         )
-        self.last_dof_vel = torch.zeros(
+        self.last_motor_joint_vel = torch.zeros(
             (self._num_envs, self._num_articulated_joints),
             dtype=torch.float,
             device=self._device,
             requires_grad=False,
         )
+        self.last_vel = torch.zeros(
+            (self._num_envs, 3),
+            dtype=torch.float,
+            device=self._device,
+            requires_grad=False,
+        )
         self.last_actions = torch.zeros(
-            self._num_envs,
-            self.num_actions,
+            (self._num_envs, self.num_actions),
             dtype=torch.float,
             device=self._device,
             requires_grad=False,
@@ -525,73 +362,50 @@ class OlympusTask(RLTask):
         self.reset_idx(indices)
 
     def calculate_metrics(self) -> None:
-        torso_position, torso_rotation = self._olympusses.get_world_poses(clone=False)
+        base_position, base_rotation = self._olympusses.get_world_poses(clone=False)
+
+        # Calculate rew_orient
+        base_target = torch.zeros_like(base_rotation)
+        base_target[:, 0] = 1.0
+        rew_orient = -torch.abs(quat_diff_rad(base_rotation, base_target)) * self.rew_scales["r_orient"]
+
+        # Calculate rew_{base_acc}
         root_velocities = self._olympusses.get_velocities(clone=False)
-        dof_pos = self._olympusses.get_joint_positions(clone=False)
-        dof_vel = self._olympusses.get_joint_velocities(clone=False)
-
         velocity = root_velocities[:, 0:3]
-        ang_velocity = root_velocities[:, 3:6]
+        rew_base_acc = -torch.norm((velocity-self.last_vel) / self.dt, dim=1)**2 * self.rew_scales["r_base_acc"]
 
-        base_lin_vel = quat_rotate_inverse(torso_rotation, velocity)
-        base_ang_vel = quat_rotate_inverse(torso_rotation, ang_velocity)
+        # Calculate rew_{action_clip}
+        rew_action_clip = -torch.norm(self.actions-self.current_targets, dim=1)**2 * self.rew_scales["r_action_clip"]
 
-        # velocity tracking reward
-        lin_vel_error = torch.sum(
-            torch.square(self.commands[:, :2] - base_lin_vel[:, :2]), dim=1
-        )
-        ang_vel_error = torch.square(self.commands[:, 2] - base_ang_vel[:, 2])
-        rew_lin_vel_xy = (
-            torch.exp(-lin_vel_error / 0.25) * self.rew_scales["lin_vel_xy"]
-        )
-        rew_ang_vel_z = torch.exp(-ang_vel_error / 0.25) * self.rew_scales["ang_vel_z"]
+        # Calculate rew_{torque_clip}
+        motor_joint_pos = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
+        motor_joint_vel = self._olympusses.get_joint_velocities(clone=False, joint_indices=self.actuated_idx)
+        commanded_torques = self.Kp*(self.current_targets-motor_joint_pos) - self.Kd*motor_joint_vel
+        applied_torques = commanded_torques.clamp(-self.max_torque,self.max_torque)
+        rew_torque_clip = -torch.norm(commanded_torques-applied_torques,dim=1)**2 * self.rew_scales["r_torque_clip"]
 
-        rew_lin_vel_z = torch.square(base_lin_vel[:, 2]) * self.rew_scales["lin_vel_z"]
-        rew_joint_acc = (
-            torch.sum(torch.square(self.last_dof_vel - dof_vel), dim=1)
-            * self.rew_scales["joint_acc"]
-        )
-        rew_action_rate = (
-            torch.sum(torch.square(self.last_actions - self.actions), dim=1)
-            * self.rew_scales["action_rate"]
-        )
-        rew_cosmetic = (
-            torch.sum(
-                torch.abs(
-                    dof_pos[:, 0:4] - self.default_articulated_joints_pos[:, 0:4]
-                ),
-                dim=1,
-            )
-            * self.rew_scales["cosmetic"]
-        )
-
-        euler_angs = get_euler_xyz(torso_rotation)
-
-        rew_orient_3D_pitch = - torch.square(
-            euler_angs[1] - 1.5
-        )
-        # print(rew_orient_3D_pitch)
-
+        # Calculate total reward
         total_reward = (
-            rew_lin_vel_xy
-            + rew_ang_vel_z
-            + rew_joint_acc
-            + rew_action_rate
-            + rew_cosmetic
-            + rew_lin_vel_z
-        )
-        total_reward = torch.clip(total_reward, 0.0, None)
+            rew_orient 
+            + rew_base_acc
+            + rew_action_clip
+            + rew_torque_clip
+        ) * self.rew_scales["total"]
 
-        self.last_actions[:] = self.actions[:]
-        self.last_dof_vel[:] = dof_vel[:]
+        # Save last values
+        self.last_actions         = self.actions.clone()
+        self.last_motor_joint_vel = motor_joint_vel.clone()
+        self.last_vel             = velocity.clone()
 
-        self.fallen_over = self._olympusses.is_base_below_threshold(
-            threshold=0.25, ground_heights=0.0
-        )
-        total_reward[torch.nonzero(self.fallen_over)] = -1
-        self.rew_buf[:] = rew_orient_3D_pitch #total_reward.detach()
+        # Place total reward in bugger
+        self.rew_buf = total_reward.detach().clone()
 
     def is_done(self) -> None:
         # reset agents
         time_out = self.progress_buf >= self.max_episode_length - 1
-        self.reset_buf[:] = time_out | self.fallen_over
+
+        # TODO: Collision detection 
+
+
+
+        self.reset_buf[:] = time_out 

@@ -10,7 +10,7 @@ env:
   clipObservations: 5.0
   clipActions: 1.0
 
-  controlFrequencyInv: 2
+  controlFrequencyInv: 1 #old 2
 
   baseInitState:
     pos: [0.0, 0.0, 0.52] # x,y,z [m]
@@ -18,16 +18,11 @@ env:
     vLinear: [0.0, 0.0, 0.0]  # x,y,z [m/s]
     vAngular: [0.0, 0.0, 0.0]  # x,y,z [rad/s]
 
-  randomCommandVelocityRanges:
-    linear_x: [-2., 2.] # min max [m/s]
-    linear_y: [-1., 1.]   # min max [m/s]
-    yaw: [-1., 1.]          # min max [rad/s]
-
   control:
     # PD Drive parameters:
     stiffness: 85.0  # [N*m/rad]
     damping: 2.0     # [N*m*s/rad]
-    maxTorque: 24.8 # [N*m]
+    max_torque: 24.8 # [N*m]
     actionScale: 13.5
 
   defaultJointAngles:  # = target angles when action = 0.0
@@ -53,22 +48,15 @@ env:
     BackKnee_BL             : 0.00  # [rad]
 
   learn:
-    # rewards
-    linearVelocityXYRewardScale: 1.0
-    angularVelocityZRewardScale: 0.5
-    linearVelocityZRewardScale: -0.03
-    jointAccRewardScale: -0.0003
-    actionRateRewardScale: -0.006
-    cosmeticRewardScale: -0.06
-
-    # normalization
-    linearVelocityScale: 2.0
-    angularVelocityScale: 0.25
-    dofPositionScale: 1.0
-    dofVelocityScale: 0.05
+    # rewards    
+    rewardScale: 0.005
+    rOrientRewardScale: 1
+    rBaseAccRewardScale: 0.01
+    rActionClipRewardScale: 0.33
+    rTorqueClipRewardScale: 0.33
 
     # episode length in seconds
-    episodeLength_s: 50
+    episodeLength_s: 5
 
 sim:
   dt: 0.01 #0.00208
