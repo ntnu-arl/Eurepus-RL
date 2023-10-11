@@ -51,7 +51,7 @@ params:
     reward_shaper:
       scale_value: 1.0
     normalize_advantage: True
-    gamma: 0.99
+    gamma: 0.9995
     tau: 0.95
     e_clip: 0.2
     entropy_coef: 0.0

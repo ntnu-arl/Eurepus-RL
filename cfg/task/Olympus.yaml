@@ -46,6 +46,12 @@ env:
     BackKnee_FL             : 0.00  # [rad]
     BackKnee_BR             : 0.00  # [rad]
     BackKnee_BL             : 0.00  # [rad]
+  
+  # Joint limits
+  jointLimits:
+    lateralMotor              : [-10, 200]  # [deg]
+    transversalMotor          : [-60, 180]  # [deg]¨
+    maxTransversalMotorDiff   : -10          # [deg]
 
   learn:
     # rewards    
@@ -59,7 +65,7 @@ env:
     episodeLength_s: 5
 
 sim:
-  dt: 0.01 #0.00208
+  dt: 0.00208
   use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
   gravity: [0.0, 0.0, 0.0] #-9.81]
   add_ground_plane: False

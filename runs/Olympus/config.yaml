@@ -51,6 +51,14 @@ task:
       BackKnee_FL: 0.0
       BackKnee_BR: 0.0
       BackKnee_BL: 0.0
+    jointLimits:
+      lateralMotor:
+      - -10
+      - 200
+      transversalMotor:
+      - -60
+      - 180
+      maxTransversalMotorDiff: -10
     learn:
       rewardScale: 0.005
       rOrientRewardScale: 1
@@ -59,7 +67,7 @@ task:
       rTorqueClipRewardScale: 0.33
       episodeLength_s: 5
   sim:
-    dt: 0.01
+    dt: 0.00208
     use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
     gravity:
     - 0.0
@@ -157,7 +165,7 @@ train:
       reward_shaper:
         scale_value: 1.0
       normalize_advantage: true
-      gamma: 0.99
+      gamma: 0.9995
       tau: 0.95
       e_clip: 0.2
       entropy_coef: 0.0
