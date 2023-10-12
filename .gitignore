@@ -1,0 +1,15 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Project specific
+env/
+*.env
+*.log
+*.sqlite3
+*.pyc
+*.DS_Store
+
+# VS Code specific
+.vscode/
