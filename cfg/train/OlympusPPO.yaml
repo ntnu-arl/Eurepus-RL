@@ -1,4 +1,4 @@
-params:
+params: # Docs: https://github.com/Denys88/rl_games#config-parameters
   seed: ${...seed}
 
   algo:

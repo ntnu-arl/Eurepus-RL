@@ -199,7 +199,7 @@ device_id: 0
 rl_device: cuda:0
 multi_gpu: false
 num_threads: 4
-solver_type: 1
+solver_type: 0
 test: false
 checkpoint: ''
 headless: true

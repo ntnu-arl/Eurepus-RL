@@ -50,8 +50,8 @@ env:
   # Joint limits
   jointLimits:
     lateralMotor              : [-10, 200]  # [deg]
-    transversalMotor          : [-60, 180]  # [deg]¨
-    maxTransversalMotorDiff   : -10          # [deg]
+    transversalMotor          : [-60, 180]  # [deg]
+    maxTransversalMotorDiff   : -10         # [deg]
 
   learn:
     # rewards    
@@ -85,8 +85,8 @@ sim:
     worker_thread_count: ${....num_threads}
     solver_type: 0 #${....solver_type}
     use_gpu: ${eq:${....sim_device},"gpu"} # set to False to run on CPU
-    solver_position_iteration_count: 4 # Old 4
-    solver_velocity_iteration_count: 1 #Old 1
+    solver_position_iteration_count: 4 
+    solver_velocity_iteration_count: 1 
     contact_offset: 0.02
     rest_offset: 0.0
     bounce_threshold_velocity: 0.2
