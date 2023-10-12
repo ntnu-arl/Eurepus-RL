@@ -256,7 +256,7 @@ class OlympusTask(RLTask):
 
         olympus = Olympus(
             prim_path=self.default_zero_env_path + "/Olympus",
-            usd_path="/Olympus-ws/Olympus-USD/Olympus/v2/olympus_v2.usd",
+            usd_path="/Olympus-ws/Olympus-USD/Olympus/v2/olympus_v2_instanceable.usd",
             name="Olympus",
             translation=self._olympus_translation,
         )
@@ -359,11 +359,11 @@ class OlympusTask(RLTask):
         observations = {self._olympusses.name: {"obs_buf": self.obs_buf}}
 
         ## LOGGING
-        self._logger.add_data(0.0, 0.0, self._olympusses)
-        if (self._obs_count % 100 == 0):
-            print("Saving log to olympus_logs.json")
-            self._logger.save_to_json("/Olympus-ws/in-air-stabilization/logs/olympus_logs.json")
-        self._obs_count += 1
+        # self._logger.add_data(0.0, 0.0, self._olympusses)
+        # if (self._obs_count % 100 == 0):
+        #     print("Saving log to olympus_logs.json")
+        #     self._logger.save_to_json("/Olympus-ws/in-air-stabilization/logs/olympus_logs.json")
+        # self._obs_count += 1
 
         return observations
 
@@ -380,9 +380,11 @@ class OlympusTask(RLTask):
         )
         self.actions[:] = actions.clone().to(self._device)
         current_targets = self.current_targets.clone()
-        current_targets[:, self.actuated_idx] += (
-            self.action_scale * self.actions * self.dt
-        )  # test if mask is necessary
+        # current_targets[:, self.actuated_idx] += (
+        #     self.action_scale * self.actions * self.dt
+        # )  # test if mask is necessary
+
+        current_targets[:, self.actuated_idx] += self.actions
 
         # current_targets = (
         #     self.current_targets[:,] + self.action_scale * self.actions * self.dt
@@ -475,8 +477,8 @@ class OlympusTask(RLTask):
         dof_limits = self._olympusses.get_dof_limits()
         self.olympus_dof_lower_limits = dof_limits[0, :, 0].to(device=self._device)
         self.olympus_dof_upper_limits = dof_limits[0, :, 1].to(device=self._device)
-        # self.olympus_dof_upper_limits = torch.tensor([0,0,0,0,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14], device='cuda:0')
-        # self.olympus_dof_lower_limits = torch.zeros(20, device='cuda:0')
+        self.olympus_dof_upper_limits = torch.tensor([0,0,0,0,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14,3.14], device='cuda:0')
+        self.olympus_dof_lower_limits = torch.zeros(20, device='cuda:0')
 
 
         self.commands = torch.zeros(
