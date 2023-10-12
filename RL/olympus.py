@@ -151,7 +151,7 @@ class OlympusTask(RLTask):
 
         olympus = Olympus(
             prim_path=self.default_zero_env_path + "/Olympus",
-            usd_path="c:/Users/Finn/OneDrive - NTNU/Dokumenter/TERMIN 9/Project/Olympus-USD/Olympus/v2/olympus_v2.usd",
+            usd_path="/Olympus-ws/Olympus-USD/Olympus/v2/olympus_v2.usd",
             name="Olympus",
             translation=self._olympus_translation,
         )
@@ -236,7 +236,13 @@ class OlympusTask(RLTask):
 
         return observations
 
-    def pre_physics_step(self, actions) -> None:
+    def pre_physics_step(self) -> None:
+        """
+        Prepares the quadroped for the next physichs step. 
+        NB this has to be done before each call to world.step().
+        NB this method does not acceopt control signals as input, 
+        please see the apply_contol method.
+        """
         # Check if simulation is running
         if not self._env._world.is_playing():
             return
@@ -245,17 +251,24 @@ class OlympusTask(RLTask):
         reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
         if len(reset_env_ids) > 0:
             self.reset_idx(reset_env_ids)
-    
-        # Save and clamp actions
-        self.actions = actions.clone()
-        self.current_targets = self._clamp_joint_angels(actions)
-
-        # Set targets
-        self._olympusses.set_joint_position_targets(self.current_targets, joint_indices=self.actuated_idx)
-
+            
         # Step spring
         spring_actions = self.spring.forward()
         self._olympusses.apply_action(spring_actions)
+
+    def apply_control(self,actions) -> None:
+        """
+        Apply control signals to the quadropeds.
+        """
+        #lineraly interpolate between min and max
+        self.current_policy_targets = (0.5*actions*(self.olympus_motor_joint_upper_limits-self.olympus_motor_joint_lower_limits).view(1,-1) +
+                                       0.5*(self.olympus_motor_joint_upper_limits+self.olympus_motor_joint_lower_limits).view(1,-1) )
+        #clamp targets to avoid self collisions
+        self.current_clamped_targets = self._clamp_joint_angels(self.current_policy_targets)
+
+        # Set targets
+        self._olympusses.set_joint_position_targets(self.current_clamped_targets, joint_indices=self.actuated_idx)
+
     
     def reset_idx(self, env_ids):
         num_resets = len(env_ids)
@@ -375,7 +388,7 @@ class OlympusTask(RLTask):
         rew_base_acc = -torch.norm((velocity-self.last_vel) / self.dt, dim=1)**2 * self.rew_scales["r_base_acc"]
 
         # Calculate rew_{action_clip}
-        rew_action_clip = -torch.norm(self.actions-self.current_targets, dim=1)**2 * self.rew_scales["r_action_clip"]
+        rew_action_clip = -torch.norm(self.current_policy_targets-self.current_clamped_targets, dim=1)**2 * self.rew_scales["r_action_clip"]
 
         # Calculate rew_{torque_clip}
         motor_joint_pos = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
@@ -411,10 +424,6 @@ class OlympusTask(RLTask):
         self.reset_buf[:] = time_out 
 
     def _clamp_joint_angels(self,joint_targets):
-        joint_targets = joint_targets.clamp(
-            self.olympus_motor_joint_lower_limits,
-            self.olympus_motor_joint_upper_limits,
-        )
 
         front_pos = joint_targets[:,self.front_transversal_indicies]
         back_pos = joint_targets[:,self.back_transversal_indicies]
