@@ -151,7 +151,7 @@ class OlympusTask(RLTask):
 
         olympus = Olympus(
             prim_path=self.default_zero_env_path + "/Olympus",
-            usd_path="/Olympus-ws/Olympus-USD/Olympus/v2/olympus_v2.usd",
+            usd_path="/Olympus-ws/Olympus-USD/Olympus/v2/olympus_v2_instanceable.usd",
             name="Olympus",
             translation=self._olympus_translation,
         )
@@ -234,6 +234,7 @@ class OlympusTask(RLTask):
         #    self._logger.save_to_json("/Olympus-ws/in-air-stabilization/logs/olympus_logs.json")
         #self._obs_count += 1
 
+
         return observations
 
     def pre_physics_step(self) -> None:
@@ -251,7 +252,7 @@ class OlympusTask(RLTask):
         reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
         if len(reset_env_ids) > 0:
             self.reset_idx(reset_env_ids)
-            
+  
         # Step spring
         spring_actions = self.spring.forward()
         self._olympusses.apply_action(spring_actions)
