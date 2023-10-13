@@ -1,5 +1,5 @@
 # Byte-compiled / optimized / DLL files
-__pycache__/
+*/__pycache__/
 *.py[cod]
 *$py.class
 
@@ -10,6 +10,8 @@ env/
 *.sqlite3
 *.pyc
 *.DS_Store
+runs/*
+
 
 # VS Code specific
 .vscode/
