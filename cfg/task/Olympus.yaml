@@ -10,7 +10,7 @@ env:
   clipObservations: 5.0
   clipActions: 1.0
 
-  controlFrequencyInv: 1 #old 2
+  controlFrequencyInv: 4 #old 2
 
   baseInitState:
     pos: [0.0, 0.0, 0.52] # x,y,z [m]

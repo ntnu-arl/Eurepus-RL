@@ -6,7 +6,7 @@ task:
     envSpacing: 4.0
     clipObservations: 5.0
     clipActions: 1.0
-    controlFrequencyInv: 1
+    controlFrequencyInv: 4
     baseInitState:
       pos:
       - 0.0
@@ -202,8 +202,8 @@ num_threads: 4
 solver_type: 0
 test: false
 checkpoint: ''
-headless: false
-enable_livestream: false
+headless: true
+enable_livestream: true
 mt_timeout: 30
 wandb_activate: false
 wandb_group: ''
