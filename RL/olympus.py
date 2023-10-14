@@ -107,9 +107,9 @@ class OlympusTask(RLTask):
         init_euler_min = -0.10*torch.tensor([torch.pi,torch.pi,torch.pi],device=self._device) 
         init_euler_max = 0.10*torch.tensor([torch.pi,torch.pi,torch.pi],device=self._device) 
 
-        self.roll_sampeler = Uniform(init_euler_min[0],init_euler_max[0])
+        self.roll_sampeler  = Uniform(init_euler_min[0],init_euler_max[0])
         self.pitch_sampeler = Uniform(init_euler_min[1],init_euler_max[1])
-        self.yaw_sampeler = Uniform(init_euler_min[2],init_euler_max[2])
+        self.yaw_sampeler   = Uniform(init_euler_min[2],init_euler_max[2])
 
         self._obs_count = 0
         self._logger = OlympusLogger()
@@ -155,7 +155,7 @@ class OlympusTask(RLTask):
 
         olympus = Olympus(
             prim_path=self.default_zero_env_path + "/Olympus",
-            usd_path="/Olympus-ws/Olympus-USD/Olympus/v2/olympus_v2_instanceable.usd",
+            usd_path="C:/Users/Finn/OneDrive - NTNU/Dokumenter/TERMIN 9/Project/Olympus-USD/Olympus/v2/olympus_v2_instanceable.usd", # C:/Users/Finn/OneDrive - NTNU/Dokumenter/TERMIN 9/Project/Olympus-USD/Olympus/v2/olympus_v2_instanceable.usd
             name="Olympus",
             translation=self._olympus_translation,
         )
@@ -204,14 +204,8 @@ class OlympusTask(RLTask):
         
 
     def get_observations(self) -> dict:
-        motor_joint_pos = self._olympusses.get_joint_positions(
-            clone=False, joint_indices=self.actuated_idx
-        )
         transversal_motor_joint_pos = self._olympusses.get_joint_positions(
             clone=False, joint_indices=self.actuated_transversal_idx
-        )
-        motor_joint_vel = self._olympusses.get_joint_velocities(
-            clone=False, joint_indices=self.actuated_idx
         )
         transversal_motor_joint_vel = self._olympusses.get_joint_velocities(
             clone=False, joint_indices=self.actuated_transversal_idx
@@ -281,32 +275,31 @@ class OlympusTask(RLTask):
         """
         Apply control signals to the quadropeds.
         """
-
-        actions_FUCK = -torch.ones((self._num_envs, self._num_actuated), device=self._device) ## NB: since we map from -1 to 1, and lateral lower limits are 0, we must set laterals to -1 here.
+        new_targets = -torch.zeros((self._num_envs, self._num_actuated), device=self._device) 
 
         for transversalMotor in self.actuated_transversal_name2idx.keys():
             if 'BackTransversalMotor_B' in transversalMotor:
-                actions_FUCK[:,self.actuated_transversal_name2idx[transversalMotor]] = actions[:,0]
+                new_targets[:,self.actuated_transversal_name2idx[transversalMotor]] = actions[:,0]
             if 'BackTransversalMotor_F' in transversalMotor:
-                actions_FUCK[:,self.actuated_transversal_name2idx[transversalMotor]] = actions[:,1]
+                new_targets[:,self.actuated_transversal_name2idx[transversalMotor]] = actions[:,1]
             if 'FrontTransversalMotor_B' in transversalMotor:
-                actions_FUCK[:,self.actuated_transversal_name2idx[transversalMotor]] = actions[:,2]
+                new_targets[:,self.actuated_transversal_name2idx[transversalMotor]] = actions[:,2]
             if 'FrontTransversalMotor_F' in transversalMotor:
-                actions_FUCK[:,self.actuated_transversal_name2idx[transversalMotor]] = actions[:,3]
+                new_targets[:,self.actuated_transversal_name2idx[transversalMotor]] = actions[:,3]
 
-
-        # actions_FUCK[:,self.actuated_transversal_idx] = torch.cat([actions, actions], dim = 1)
 
         #lineraly interpolate between min and max
-        self.current_policy_targets = (0.5*actions_FUCK*(self.olympus_motor_joint_upper_limits-self.olympus_motor_joint_lower_limits).view(1,-1) +
+        self.current_policy_targets = (0.5*new_targets*(self.olympus_motor_joint_upper_limits-self.olympus_motor_joint_lower_limits).view(1,-1) +
                                        0.5*(self.olympus_motor_joint_upper_limits+self.olympus_motor_joint_lower_limits).view(1,-1) )
         
         
         #clamp targets to avoid self collisions
         self.current_clamped_targets = self._clamp_joint_angels(self.current_policy_targets)
 
+        # Set transversal targets to zero 
+        self.current_clamped_targets[:, self.actuated_lateral_idx] = 0
+
         # Set targets
-        self.current_clamped_targets[:,:3] = 0
         self._olympusses.set_joint_position_targets(self.current_clamped_targets, joint_indices=self.actuated_idx)
 
     
@@ -370,6 +363,11 @@ class OlympusTask(RLTask):
         for i, name in enumerate(self._olympusses.dof_names):
             if "Transversal" in name:
                 self.actuated_transversal_name2idx[name] = i
+
+        self.actuated_lateral_name2idx = {}
+        for i, name in enumerate(self._olympusses.dof_names):
+            if "Lateral" in name:
+                self.actuated_lateral_name2idx[name] = i
         
         self.actuated_idx = torch.tensor(
             list(self.actuated_name2idx.values()), dtype=torch.long
@@ -379,6 +377,10 @@ class OlympusTask(RLTask):
 
         self.actuated_transversal_idx = torch.tensor(
             list(self.actuated_transversal_name2idx.values()), dtype=torch.long
+        )
+
+        self.actuated_lateral_idx = torch.tensor(
+            list(self.actuated_lateral_name2idx.values()), dtype=torch.long
         )
 
 
@@ -440,16 +442,11 @@ class OlympusTask(RLTask):
     def calculate_metrics(self) -> None:
         base_position, base_rotation = self._olympusses.get_world_poses(clone=False)
 
-        # Calculate rew_orient
-        # base_target = torch.zeros_like(base_rotation)
-        # base_target[:, 0] = 1.0
-        # rew_orient = -torch.abs(quat_diff_rad(base_rotation, base_target)) * self.rew_scales["r_orient"]
-
         # Calculate rew_orient which is the absolute pitch angle
         roll, pitch, yaw = get_euler_xyz(base_rotation)
         pitch[pitch > torch.pi] -= 2 * torch.pi
 
-        reference_pitch = 1
+        reference_pitch = 1 # rad
         rew_orient = -torch.abs(pitch - reference_pitch ) * self.rew_scales["r_orient"] * 180/torch.pi
 
         # Calculate rew_{base_acc}
