@@ -76,8 +76,9 @@ class OlympusTask(RLTask):
 
         # other
         self.dt = self._task_cfg["sim"]["dt"]  # 1/60
+        self._controlFrequencyInv = self._task_cfg["env"]["controlFrequencyInv"]
         self.max_episode_length_s = self._task_cfg["env"]["learn"]["episodeLength_s"]
-        self.max_episode_length = int(self.max_episode_length_s / self.dt + 0.5)
+        self.max_episode_length = int(self.max_episode_length_s / (self.dt * self._controlFrequencyInv ) + 0.5)
         self.Kp = self._task_cfg["env"]["control"]["stiffness"]
         self.Kd = self._task_cfg["env"]["control"]["damping"]
         self.max_torque = self._task_cfg["env"]["control"]["max_torque"]
@@ -98,6 +99,7 @@ class OlympusTask(RLTask):
         self._num_articulated_joints = 20
 
         self._max_transversal_motor_diff = self._task_cfg["env"]["jointLimits"]["maxTransversalMotorDiff"] * torch.pi/180
+        self._max_transversal_motor_sum = self._task_cfg["env"]["jointLimits"]["maxTransversalMotorSum"] * torch.pi/180
 
         RLTask.__init__(self, name, env)
 
@@ -226,6 +228,7 @@ class OlympusTask(RLTask):
 
         ## make dimensions of pitch and ang_vel_pitch fit that of motor_joint_pos and motor_joint_vel
         base_pitch = base_pitch.unsqueeze(dim=-1)
+        base_pitch [base_pitch > torch.pi] -= 2 * torch.pi
         base_angular_vel_pitch = base_angular_vel_pitch.unsqueeze(dim=-1)
 
         reference_pitch = 1
@@ -261,6 +264,7 @@ class OlympusTask(RLTask):
         NB this method does not acceopt control signals as input, 
         please see the apply_contol method.
         """
+
         # Check if simulation is running
         if not self._env._world.is_playing():
             return
@@ -444,7 +448,7 @@ class OlympusTask(RLTask):
 
         # Calculate rew_orient which is the absolute pitch angle
         roll, pitch, yaw = get_euler_xyz(base_rotation)
-        pitch = (pitch + torch.pi) % (2 * torch.pi) - torch.pi
+        pitch[pitch > torch.pi] -= 2 * torch.pi
 
         rew_orient = -torch.abs(pitch) * self.rew_scales["r_orient"]
 
@@ -466,9 +470,9 @@ class OlympusTask(RLTask):
         # Calculate total reward
         total_reward = (
             rew_orient 
-            + rew_base_acc
-            + rew_action_clip
-            + rew_torque_clip
+            # + rew_base_acc
+            # + rew_action_clip
+            # + rew_torque_clip
         ) * self.rew_scales["total"]
 
         # Save last values
@@ -499,9 +503,9 @@ class OlympusTask(RLTask):
         front_pos[clamp_mask] -= motor_joint_sum[clamp_mask]/2
         back_pos[clamp_mask]  -= motor_joint_sum[clamp_mask]/2
 
-        clamp_mask_wide = motor_joint_sum > torch.pi
-        front_pos[clamp_mask_wide] -= (motor_joint_sum[clamp_mask_wide] - torch.pi)/2
-        back_pos[clamp_mask_wide]  -= (motor_joint_sum[clamp_mask_wide] - torch.pi)/2
+        clamp_mask_wide = motor_joint_sum > self._max_transversal_motor_sum
+        front_pos[clamp_mask_wide] -= (motor_joint_sum[clamp_mask_wide] - self._max_transversal_motor_sum)/2
+        back_pos[clamp_mask_wide]  -= (motor_joint_sum[clamp_mask_wide] - self._max_transversal_motor_sum)/2
 
 
         joint_targets[:, self.front_transversal_indicies] = front_pos
