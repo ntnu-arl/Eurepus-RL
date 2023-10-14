@@ -94,7 +94,7 @@ class OlympusTask(RLTask):
         # self._num_observations = 31
         # self._num_actions = 12
         self._num_observations = 18
-        self._num_actions= 8 # 4
+        self._num_actions= 4
         self._num_articulated_joints = 20
 
         self._max_transversal_motor_diff = self._task_cfg["env"]["jointLimits"]["maxTransversalMotorDiff"] * torch.pi/180
@@ -278,8 +278,20 @@ class OlympusTask(RLTask):
         Apply control signals to the quadropeds.
         """
 
-        actions_FUCK = -torch.ones((self._num_envs, self._num_actuated), device=self._device) ## Very Ugly Guy
-        actions_FUCK[:,self.actuated_transversal_idx] = actions
+        actions_FUCK = -torch.ones((self._num_envs, self._num_actuated), device=self._device) ## NB: since we map from -1 to 1, and lateral lower limits are 0, we must set laterals to -1 here.
+
+        for transversalMotor in self.actuated_transversal_name2idx.keys():
+            if 'BackTransversalMotor_B' in transversalMotor:
+                actions_FUCK[:,self.actuated_transversal_name2idx[transversalMotor]] = actions[:,0]
+            if 'BackTransversalMotor_F' in transversalMotor:
+                actions_FUCK[:,self.actuated_transversal_name2idx[transversalMotor]] = actions[:,1]
+            if 'FrontTransversalMotor_B' in transversalMotor:
+                actions_FUCK[:,self.actuated_transversal_name2idx[transversalMotor]] = actions[:,2]
+            if 'FrontTransversalMotor_F' in transversalMotor:
+                actions_FUCK[:,self.actuated_transversal_name2idx[transversalMotor]] = actions[:,3]
+
+
+        # actions_FUCK[:,self.actuated_transversal_idx] = torch.cat([actions, actions], dim = 1)
 
         #lineraly interpolate between min and max
         self.current_policy_targets = (0.5*actions_FUCK*(self.olympus_motor_joint_upper_limits-self.olympus_motor_joint_lower_limits).view(1,-1) +
@@ -290,7 +302,7 @@ class OlympusTask(RLTask):
         self.current_clamped_targets = self._clamp_joint_angels(self.current_policy_targets)
 
         # Set targets
-        print(self.current_clamped_targets)
+        self.current_clamped_targets[:,:3] = 0
         self._olympusses.set_joint_position_targets(self.current_clamped_targets, joint_indices=self.actuated_idx)
 
     
@@ -420,6 +432,9 @@ class OlympusTask(RLTask):
 
         # Calculate rew_orient which is the absolute pitch angle
         _, pitch, _ = get_euler_xyz(base_rotation)
+        pitch = (pitch + torch.pi) % (2 * torch.pi) - torch.pi
+        # print(pitch)
+
         rew_orient = -torch.abs(pitch) * self.rew_scales["r_orient"]
 
         # Calculate rew_{base_acc}
