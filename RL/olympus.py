@@ -102,8 +102,8 @@ class OlympusTask(RLTask):
         RLTask.__init__(self, name, env)
 
         # Random initial euler angles after reset
-        init_euler_min = -0.10*torch.tensor([torch.pi,torch.pi,torch.pi],device=self._device)
-        init_euler_max = 0.10*torch.tensor([torch.pi,torch.pi,torch.pi],device=self._device)
+        init_euler_min = -0.10*torch.tensor([torch.pi,torch.pi,torch.pi],device=self._device) 
+        init_euler_max = 0.10*torch.tensor([torch.pi,torch.pi,torch.pi],device=self._device) 
 
         self.roll_sampeler = Uniform(init_euler_min[0],init_euler_max[0])
         self.pitch_sampeler = Uniform(init_euler_min[1],init_euler_max[1])
@@ -228,11 +228,12 @@ class OlympusTask(RLTask):
         base_pitch = base_pitch.unsqueeze(dim=-1)
         base_angular_vel_pitch = base_angular_vel_pitch.unsqueeze(dim=-1)
 
+        reference_pitch = 1
         obs = torch.cat(
             (
                 transversal_motor_joint_pos,
                 transversal_motor_joint_vel,
-                base_pitch,
+                base_pitch + reference_pitch,
                 base_angular_vel_pitch,
             ),
             dim=-1,
@@ -319,10 +320,21 @@ class OlympusTask(RLTask):
 
         # Set initial root states
         root_vel = torch.zeros((num_resets, 6), device=self._device)
+
+        roll =self.roll_sampeler.rsample((num_resets,))
+        pitch=self.pitch_sampeler.rsample((num_resets,))
+        yaw  =self.yaw_sampeler.rsample((num_resets,))
+
         rand_rot = quat_from_euler_xyz(
             roll =self.roll_sampeler.rsample((num_resets,)),
             pitch=self.pitch_sampeler.rsample((num_resets,)),
             yaw  =self.yaw_sampeler.rsample((num_resets,))
+        )
+
+        zero_rot = quat_from_euler_xyz(
+            roll = torch.zeros_like(roll) - torch.pi/2,
+            pitch = torch.zeros_like(pitch),
+            yaw = torch.zeros_like(yaw)
         )
        
         # Apply resets
@@ -332,7 +344,7 @@ class OlympusTask(RLTask):
 
         self._olympusses.set_world_poses(
             self.initial_root_pos[env_ids].clone(),
-            rand_rot,
+            zero_rot, #rand_rot
             indices,
         )
         self._olympusses.set_velocities(root_vel, indices)
@@ -431,9 +443,8 @@ class OlympusTask(RLTask):
         # rew_orient = -torch.abs(quat_diff_rad(base_rotation, base_target)) * self.rew_scales["r_orient"]
 
         # Calculate rew_orient which is the absolute pitch angle
-        _, pitch, _ = get_euler_xyz(base_rotation)
+        roll, pitch, yaw = get_euler_xyz(base_rotation)
         pitch = (pitch + torch.pi) % (2 * torch.pi) - torch.pi
-        # print(pitch)
 
         rew_orient = -torch.abs(pitch) * self.rew_scales["r_orient"]
 
@@ -483,10 +494,16 @@ class OlympusTask(RLTask):
         front_pos = joint_targets[:,self.front_transversal_indicies]
         back_pos = joint_targets[:,self.back_transversal_indicies]
 
-        motor_joint_sum = (front_pos + back_pos) - self._max_transversal_motor_diff
-        clamp_mask = motor_joint_sum < 0
+        motor_joint_sum = (front_pos + back_pos)
+        clamp_mask = motor_joint_sum < self._max_transversal_motor_diff
         front_pos[clamp_mask] -= motor_joint_sum[clamp_mask]/2
         back_pos[clamp_mask]  -= motor_joint_sum[clamp_mask]/2
+
+        clamp_mask_wide = motor_joint_sum > torch.pi
+        front_pos[clamp_mask_wide] -= (motor_joint_sum[clamp_mask_wide] - torch.pi)/2
+        back_pos[clamp_mask_wide]  -= (motor_joint_sum[clamp_mask_wide] - torch.pi)/2
+
+
         joint_targets[:, self.front_transversal_indicies] = front_pos
         joint_targets[:, self.back_transversal_indicies] = back_pos
         return joint_targets
