@@ -231,12 +231,11 @@ class OlympusTask(RLTask):
         base_pitch [base_pitch > torch.pi] -= 2 * torch.pi
         base_angular_vel_pitch = base_angular_vel_pitch.unsqueeze(dim=-1)
 
-        reference_pitch = 1
         obs = torch.cat(
             (
                 transversal_motor_joint_pos,
                 transversal_motor_joint_vel,
-                base_pitch + reference_pitch,
+                base_pitch,
                 base_angular_vel_pitch,
             ),
             dim=-1,
@@ -450,12 +449,13 @@ class OlympusTask(RLTask):
         roll, pitch, yaw = get_euler_xyz(base_rotation)
         pitch[pitch > torch.pi] -= 2 * torch.pi
 
-        rew_orient = -torch.abs(pitch) * self.rew_scales["r_orient"]
+        reference_pitch = 1
+        rew_orient = -torch.abs(pitch - reference_pitch ) * self.rew_scales["r_orient"] * 180/torch.pi
 
         # Calculate rew_{base_acc}
         root_velocities = self._olympusses.get_velocities(clone=False)
         velocity = root_velocities[:, 0:3]
-        rew_base_acc = -torch.norm((velocity-self.last_vel) / self.dt, dim=1)**2 * self.rew_scales["r_base_acc"]
+        rew_base_acc = -torch.norm((velocity-self.last_vel) / (self.dt * self._controlFrequencyInv), dim=1)**2 * self.rew_scales["r_base_acc"]
 
         # Calculate rew_{action_clip}
         rew_action_clip = -torch.norm(self.current_policy_targets-self.current_clamped_targets, dim=1)**2 * self.rew_scales["r_action_clip"]
@@ -464,16 +464,22 @@ class OlympusTask(RLTask):
         motor_joint_pos = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
         motor_joint_vel = self._olympusses.get_joint_velocities(clone=False, joint_indices=self.actuated_idx)
         commanded_torques = self.Kp*(self.current_policy_targets-motor_joint_pos) - self.Kd*motor_joint_vel
+        print(commanded_torques[0])
         applied_torques = commanded_torques.clamp(-self.max_torque,self.max_torque)
         rew_torque_clip = -torch.norm(commanded_torques-applied_torques,dim=1)**2 * self.rew_scales["r_torque_clip"]
 
         # Calculate total reward
         total_reward = (
-            rew_orient 
-            # + rew_base_acc
-            # + rew_action_clip
-            # + rew_torque_clip
+            rew_orient
+            + rew_base_acc
+            + rew_action_clip
+            + rew_torque_clip
         ) * self.rew_scales["total"]
+
+        print("rew_orient:", rew_orient.mean().item())
+        print("rew_base_acc:", rew_base_acc.mean().item())
+        print("rew_action_clip:", rew_action_clip.mean().item())
+        print("rew_torque_clip:", rew_torque_clip.mean().item())
 
         # Save last values
         self.last_actions         = self.actions.clone()
