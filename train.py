@@ -95,7 +95,7 @@ def parse_hydra_configs(cfg: DictConfig):
         cfg.device_id = rank
         cfg.rl_device = f'cuda:{rank}'
     enable_viewport = "enable_cameras" in cfg.task.sim and cfg.task.sim.enable_cameras
-    env = VecEnvRLGames(headless=headless, sim_device=cfg.device_id, enable_livestream=cfg.enable_livestream, enable_viewport=enable_viewport)
+    env = VecEnvRLGames(headless=headless, sim_device=cfg.device_id, enable_livestream=cfg.enable_livestream, enable_viewport=enable_viewport, stream_type=cfg.stream_type)
 
     # ensure checkpoints can be specified as relative paths
     if cfg.checkpoint:

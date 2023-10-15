@@ -39,9 +39,10 @@ test: False
 checkpoint: ''
 
 # disables rendering
-headless: False
-# enables native livestream
-enable_livestream: False
+headless: True
+# enables livestream
+enable_livestream: True
+stream_type: "native" # native, webRTC
 # timeout for MT script
 mt_timeout: 30
 
