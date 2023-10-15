@@ -4,7 +4,7 @@ name: Olympus
 physics_engine: ${..physics_engine}
 
 env:
-  numEnvs: ${resolve_default:128,${...num_envs}} # OLD: 4096, WORKING: 128, 1280
+  numEnvs: ${resolve_default:16,${...num_envs}} #  16, 128, 1280, 2048
   envSpacing: 4.  # [m]
 
   clipObservations: 5.0

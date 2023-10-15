@@ -104,8 +104,8 @@ class OlympusTask(RLTask):
         RLTask.__init__(self, name, env)
 
         # Random initial euler angles after reset
-        init_euler_min = -0.10*torch.tensor([torch.pi,torch.pi,torch.pi],device=self._device) 
-        init_euler_max = 0.10*torch.tensor([torch.pi,torch.pi,torch.pi],device=self._device) 
+        init_euler_min = -torch.tensor([torch.pi,torch.pi,torch.pi],device=self._device) 
+        init_euler_max = torch.tensor([torch.pi,torch.pi,torch.pi],device=self._device) 
 
         self.roll_sampeler  = Uniform(init_euler_min[0],init_euler_max[0])
         self.pitch_sampeler = Uniform(init_euler_min[1],init_euler_max[1])
@@ -155,7 +155,7 @@ class OlympusTask(RLTask):
 
         olympus = Olympus(
             prim_path=self.default_zero_env_path + "/Olympus",
-            usd_path="C:/Users/Finn/OneDrive - NTNU/Dokumenter/TERMIN 9/Project/Olympus-USD/Olympus/v2/olympus_v2_instanceable.usd", # C:/Users/Finn/OneDrive - NTNU/Dokumenter/TERMIN 9/Project/Olympus-USD/Olympus/v2/olympus_v2_instanceable.usd
+            usd_path="/Olympus-ws/Olympus-USD/Olympus/v2/olympus_v2_instanceable.usd", # C:/Users/Finn/OneDrive - NTNU/Dokumenter/TERMIN 9/Project/Olympus-USD/Olympus/v2/olympus_v2_instanceable.usd
             name="Olympus",
             translation=self._olympus_translation,
         )
@@ -261,15 +261,20 @@ class OlympusTask(RLTask):
         # Check if simulation is running
         if not self._env._world.is_playing():
             return
-
+        
+        # Calculate spring
+        # spring_actions = self.spring.forward()
+        
         # Handle resets
         reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
         if len(reset_env_ids) > 0:
             self.reset_idx(reset_env_ids)
+            # spring_actions.joint_efforts[reset_env_ids, :] = 0
+
+        # Apply spring
+        # self._olympusses.apply_action(spring_actions)
+        
   
-        # Step spring
-        spring_actions = self.spring.forward()
-        self._olympusses.apply_action(spring_actions)
 
     def apply_control(self,actions) -> None:
         """
@@ -301,7 +306,6 @@ class OlympusTask(RLTask):
 
         # Set targets
         self._olympusses.set_joint_position_targets(self.current_clamped_targets, joint_indices=self.actuated_idx)
-
     
     def reset_idx(self, env_ids):
         num_resets = len(env_ids)
@@ -312,7 +316,7 @@ class OlympusTask(RLTask):
         )
 
         # Set initial motor targets
-        self.current_policy_targets[env_ids] = self.default_actuated_joints_pos[env_ids][:]
+        self.current_policy_targets[env_ids] = self.default_actuated_joints_pos[env_ids].clone()
 
         # Set initial root states
         root_vel = torch.zeros((num_resets, 6), device=self._device)
@@ -322,9 +326,9 @@ class OlympusTask(RLTask):
         yaw  =self.yaw_sampeler.rsample((num_resets,))
 
         rand_rot = quat_from_euler_xyz(
-            roll =self.roll_sampeler.rsample((num_resets,)),
+            roll =torch.zeros_like(roll) - torch.pi/2,
             pitch=self.pitch_sampeler.rsample((num_resets,)),
-            yaw  =self.yaw_sampeler.rsample((num_resets,))
+            yaw  =torch.zeros_like(yaw)
         )
 
         zero_rot = quat_from_euler_xyz(
@@ -340,7 +344,7 @@ class OlympusTask(RLTask):
 
         self._olympusses.set_world_poses(
             self.initial_root_pos[env_ids].clone(),
-            zero_rot, #rand_rot
+            rand_rot, #rand_rot
             indices,
         )
         self._olympusses.set_velocities(root_vel, indices)
@@ -446,7 +450,7 @@ class OlympusTask(RLTask):
         roll, pitch, yaw = get_euler_xyz(base_rotation)
         pitch[pitch > torch.pi] -= 2 * torch.pi
 
-        reference_pitch = 1 # rad
+        reference_pitch = 0 # rad
         rew_orient = -torch.abs(pitch - reference_pitch ) * self.rew_scales["r_orient"] * 180/torch.pi
 
         # Calculate rew_{base_acc}
@@ -461,22 +465,19 @@ class OlympusTask(RLTask):
         motor_joint_pos = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
         motor_joint_vel = self._olympusses.get_joint_velocities(clone=False, joint_indices=self.actuated_idx)
         commanded_torques = self.Kp*(self.current_policy_targets-motor_joint_pos) - self.Kd*motor_joint_vel
-        print(commanded_torques[0])
         applied_torques = commanded_torques.clamp(-self.max_torque,self.max_torque)
         rew_torque_clip = -torch.norm(commanded_torques-applied_torques,dim=1)**2 * self.rew_scales["r_torque_clip"]
 
         # Calculate total reward
         total_reward = (
             rew_orient
-            + rew_base_acc
-            + rew_action_clip
-            + rew_torque_clip
+            # + rew_base_acc
+            # + rew_action_clip
+            # + rew_torque_clip
         ) * self.rew_scales["total"]
 
-        print("rew_orient:", rew_orient.mean().item())
-        print("rew_base_acc:", rew_base_acc.mean().item())
-        print("rew_action_clip:", rew_action_clip.mean().item())
-        print("rew_torque_clip:", rew_torque_clip.mean().item())
+        # Print the average of all rewards
+        # print(f"rew_orient: {rew_orient.mean():.2f}, rew_base_acc: {rew_base_acc.mean():.2f}, rew_action_clip: {rew_action_clip.mean():.2f}, rew_torque_clip: {rew_torque_clip.mean():.2f}, total_reward: {total_reward.mean():.2f}")
 
         # Save last values
         self.last_actions         = self.actions.clone()

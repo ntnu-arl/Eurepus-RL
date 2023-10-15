@@ -2,7 +2,7 @@ task:
   name: Olympus
   physics_engine: ${..physics_engine}
   env:
-    numEnvs: ${resolve_default:128,${...num_envs}}
+    numEnvs: ${resolve_default:16,${...num_envs}}
     envSpacing: 4.0
     clipObservations: 5.0
     clipActions: 1.0
@@ -176,7 +176,7 @@ train:
       truncate_grads: true
       grad_norm: 1.0
       horizon_length: 24
-      minibatch_size: 1024
+      minibatch_size: 384
       mini_epochs: 5
       critic_coef: 2
       clip_value: true
@@ -201,10 +201,11 @@ rl_device: cuda:0
 multi_gpu: false
 num_threads: 4
 solver_type: 0
-test: false
-checkpoint: ''
-headless: false
-enable_livestream: false
+test: true
+checkpoint: /Olympus-ws/in-air-stabilization/runs/Olympus/nn/Olympus.pth
+headless: true
+enable_livestream: true
+stream_type: native
 mt_timeout: 30
 wandb_activate: false
 wandb_group: ''
