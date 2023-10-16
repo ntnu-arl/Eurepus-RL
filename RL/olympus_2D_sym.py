@@ -37,6 +37,7 @@ from omni.isaac.core.utils.torch.rotations import quat_rotate, quat_rotate_inver
 from omni.isaac.core.utils.types import ArticulationAction
 from omni.isaac.core.utils.prims import get_prim_at_path
 
+
 from Robot import Olympus, OlympusView, OlympusSpring
 from utils.olympus_logger import OlympusLogger
 
@@ -471,9 +472,9 @@ class OlympusTask(RLTask):
         # Calculate total reward
         total_reward = (
             rew_orient
-            # + rew_base_acc
-            # + rew_action_clip
-            # + rew_torque_clip
+            + rew_base_acc
+            + rew_action_clip
+            + rew_torque_clip
         ) * self.rew_scales["total"]
 
         # Print the average of all rewards
