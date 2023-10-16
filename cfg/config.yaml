@@ -42,7 +42,9 @@ checkpoint: 'runs/Olympus/nn/Olympus.pth'
 headless: True
 # enables livestream
 enable_livestream: True
+
 stream_type: "native" #native, webRTC
+
 # timeout for MT script
 mt_timeout: 30
 
