@@ -36,13 +36,15 @@ solver_type: 0 # 0: pgs, 1: tgs
 # test - if set, run policy in inference mode (requires setting checkpoint to load)
 test: False
 # used to set checkpoint path
-checkpoint: ''
+checkpoint: 'runs/Olympus/nn/Olympus.pth'
 
 # disables rendering
 headless: True
 # enables livestream
 enable_livestream: True
-stream_type: "native" # native, webRTC
+
+stream_type: "native" #native, webRTC
+
 # timeout for MT script
 mt_timeout: 30
 

@@ -114,7 +114,7 @@ def parse_hydra_configs(cfg: DictConfig):
     #################################################################
     # Initialize task (Tarek)
     #################################################################
-    from RL.olympus import OlympusTask
+    from RL.olympus_2D_sym import OlympusTask
     from omniisaacgymenvs.utils.config_utils.sim_config import SimConfig
     sim_config = SimConfig(cfg_dict)
     task = OlympusTask(name="Olympus",sim_config=sim_config, env=env)

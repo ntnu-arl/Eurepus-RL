@@ -39,7 +39,8 @@ class OlympusSpring:
                     "BL",
                     "BR",
                 ]
-            ]
+            ],
+            device=self.olympus_view._device,
         )
         self.back_motors_joint_indices = torch.tensor(
             [
@@ -50,7 +51,8 @@ class OlympusSpring:
                     "BL",
                     "BR",
                 ]
-            ]
+            ],
+            device=self.olympus_view._device,
         )
         self._num_envs = self.olympus_view.count
         self.indicies = torch.tensor(
@@ -58,7 +60,8 @@ class OlympusSpring:
                 self.olympus_view.get_dof_index(f"{pos}TransversalMotor_{quad}")
                 for quad in ["FL", "FR", "BL", "BR"]
                 for pos in ["Front", "Back"]
-            ]
+            ],
+            device=self.olympus_view._device,
         )
         self.batched_indicies = self.indicies.tile((self._num_envs, 1))
 
@@ -275,9 +278,9 @@ class OlympusSpring:
         )
 
     def _get_front_motors_joint_pos(self) -> Tensor:
-        joint_pos = self.olympus_view.get_joint_positions(joint_indices=self.front_motors_joint_indices)
+        joint_pos = self.olympus_view.get_joint_positions(joint_indices=self.front_motors_joint_indices, clone=True)
         return joint_pos.T.flatten()
 
     def _get_back_motors_joint_pos(self) -> Tensor:
-        joint_pos = self.olympus_view.get_joint_positions(joint_indices=self.back_motors_joint_indices)
+        joint_pos = self.olympus_view.get_joint_positions(joint_indices=self.back_motors_joint_indices, clone=True)
         return joint_pos.T.flatten()
