@@ -445,6 +445,34 @@ class OlympusTask(RLTask):
         self.reset_idx(indices)
 
     def calculate_metrics(self) -> None:
+
+        self._collision_buff = torch.any(torch.cat([
+                self._olympusses.MotorHousing_FL.get_net_contact_forces(clone=False) != 0,
+                self._olympusses.FrontMotor_FL.get_net_contact_forces(clone=False) != 0,
+                self._olympusses.BackMotor_FL.get_net_contact_forces(clone=False) != 0,
+                self._olympusses.FrontKnee_FL.get_net_contact_forces(clone=False) != 0,
+                self._olympusses.BackKnee_FL.get_net_contact_forces(clone=False) != 0,
+                
+                self._olympusses.MotorHousing_FR.get_net_contact_forces(clone=False) != 0,
+                self._olympusses.FrontMotor_FR.get_net_contact_forces(clone=False) != 0,
+                self._olympusses.BackMotor_FR.get_net_contact_forces(clone=False) != 0,
+                self._olympusses.FrontKnee_FR.get_net_contact_forces(clone=False) != 0,
+                self._olympusses.BackKnee_FR.get_net_contact_forces(clone=False) != 0,
+                
+                self._olympusses.MotorHousing_BL.get_net_contact_forces(clone=False) != 0,
+                self._olympusses.FrontMotor_BL.get_net_contact_forces(clone=False) != 0,
+                self._olympusses.BackMotor_BL.get_net_contact_forces(clone=False) != 0,
+                self._olympusses.FrontKnee_BL.get_net_contact_forces(clone=False) != 0,
+                self._olympusses.BackKnee_BL.get_net_contact_forces(clone=False) != 0,
+                
+                self._olympusses.MotorHousing_BR.get_net_contact_forces(clone=False) != 0,
+                self._olympusses.FrontMotor_BR.get_net_contact_forces(clone=False) != 0,
+                self._olympusses.BackMotor_BR.get_net_contact_forces(clone=False) != 0,
+                self._olympusses.FrontKnee_BR.get_net_contact_forces(clone=False) != 0,
+                self._olympusses.BackKnee_BR.get_net_contact_forces(clone=False) != 0,
+            ], dim=-1), dim=-1)
+        
+
         base_position, base_rotation = self._olympusses.get_world_poses(clone=False)
 
         # Calculate rew_orient which is the absolute pitch angle
@@ -477,6 +505,8 @@ class OlympusTask(RLTask):
             + rew_torque_clip
         ) * self.rew_scales["total"]
 
+        # total_reward[self._collision_buff] -= 100 * self.rew_scales["total"]
+
         # Print the average of all rewards
         # print(f"rew_orient: {rew_orient.mean():.2f}, rew_base_acc: {rew_base_acc.mean():.2f}, rew_action_clip: {rew_action_clip.mean():.2f}, rew_torque_clip: {rew_torque_clip.mean():.2f}, total_reward: {total_reward.mean():.2f}")
 
@@ -492,11 +522,13 @@ class OlympusTask(RLTask):
         # reset agents
         time_out = self.progress_buf >= self.max_episode_length - 1
 
-        # TODO: Collision detection 
 
+        reset = torch.logical_or(
+            time_out, self._collision_buff
+            
+        )
 
-
-        self.reset_buf[:] = time_out 
+        self.reset_buf[:] = reset  #time_out
 
     def _clamp_joint_angels(self,joint_targets):
 
