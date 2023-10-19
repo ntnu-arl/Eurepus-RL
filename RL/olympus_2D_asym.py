@@ -317,12 +317,14 @@ class OlympusTask(RLTask):
         pitch=self.pitch_sampeler.rsample((num_resets,))
         yaw  =self.yaw_sampeler.rsample((num_resets,))
 
+         # Use if we want to reset to random position (curriculum)
         rand_rot = quat_from_euler_xyz(
             roll =torch.zeros_like(roll) - torch.pi/2,
             pitch=self.pitch_sampeler.rsample((num_resets,)),
             yaw  =torch.zeros_like(yaw)
         )
 
+        # Use if we want to reset to zero
         zero_rot = quat_from_euler_xyz(
             roll = torch.zeros_like(roll) - torch.pi/2,
             pitch = torch.zeros_like(pitch),
@@ -336,7 +338,7 @@ class OlympusTask(RLTask):
 
         self._olympusses.set_world_poses(
             self.initial_root_pos[env_ids].clone(),
-            rand_rot, #rand_rot
+            rand_rot,
             indices,
         )
         self._olympusses.set_velocities(root_vel, indices)
@@ -468,9 +470,31 @@ class OlympusTask(RLTask):
             # + rew_torque_clip
         ) * self.rew_scales["total"]
 
-        # Print the average of all rewards
-        # print(f"rew_orient: {rew_orient.mean():.2f}, rew_base_acc: {rew_base_acc.mean():.2f}, rew_action_clip: {rew_action_clip.mean():.2f}, rew_torque_clip: {rew_torque_clip.mean():.2f}, total_reward: {total_reward.mean():.2f}")
+         # Print the average of all rewards
+        # print("rew_orient:")
+        # print("Max:", torch.max(rew_orient).item())
+        # print("Min:", torch.min(rew_orient).item())
+        # print("Average:", torch.mean(rew_orient).item())
+        # print("\n")
 
+        # print("rew_base_acc:")
+        # print("Max:", torch.max(rew_base_acc).item())
+        # print("Min:", torch.min(rew_base_acc).item())
+        # print("Average:", torch.mean(rew_base_acc).item())
+        # print("\n")
+
+        # print("rew_action_clip:")
+        # print("Max:", torch.max(rew_action_clip).item())
+        # print("Min:", torch.min(rew_action_clip).item())
+        # print("Average:", torch.mean(rew_action_clip).item())
+        # print("\n")
+
+        # print("rew_torque_clip:")
+        # print("Max:", torch.max(rew_torque_clip).item())
+        # print("Min:", torch.min(rew_torque_clip).item())
+        # print("Average:", torch.mean(rew_torque_clip).item())
+        # print("\n")
+        
         # Save last values
         self.last_actions         = self.actions.clone()
         self.last_motor_joint_vel = motor_joint_vel.clone()
@@ -503,10 +527,10 @@ class OlympusTask(RLTask):
         front_pos[clamp_mask_wide] -= (motor_joint_sum[clamp_mask_wide] - self._max_transversal_motor_sum)/2
         back_pos[clamp_mask_wide]  -= (motor_joint_sum[clamp_mask_wide] - self._max_transversal_motor_sum)/2
 
-
-        joint_targets[:, self.front_transversal_indicies] = front_pos
-        joint_targets[:, self.back_transversal_indicies] = back_pos
-        return joint_targets
+        clamped_targets = torch.zeros_like(joint_targets)
+        clamped_targets[:, self.front_transversal_indicies] = front_pos
+        clamped_targets[:, self.back_transversal_indicies] = back_pos
+        return clamped_targets
 
         
 
