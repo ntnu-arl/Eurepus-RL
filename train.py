@@ -43,6 +43,7 @@ from rl_games.torch_runner import Runner
 import datetime
 import os
 import torch
+import sys
 
 class RLGTrainer():
     def __init__(self, cfg, cfg_dict):
@@ -114,7 +115,14 @@ def parse_hydra_configs(cfg: DictConfig):
     #################################################################
     # Initialize task (Tarek)
     #################################################################
-    from RL.olympus_2D_sym import OlympusTask
+    if (cfg.RL_task == '2D_sym'):
+        from RL.olympus_2D_sym import OlympusTask
+    elif (cfg.RL_task == '2D_asym'):
+        from RL.olympus_2D_asym import OlympusTask
+    else:
+        sys.stderr.write("ERROR: Invalid config provided for RL_task. Must be one of: 2D_sym, 2D_asym")
+        sys.exit(1)
+
     from omniisaacgymenvs.utils.config_utils.sim_config import SimConfig
     sim_config = SimConfig(cfg_dict)
     task = OlympusTask(name="Olympus",sim_config=sim_config, env=env)
