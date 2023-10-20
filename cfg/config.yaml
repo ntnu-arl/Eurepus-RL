@@ -3,6 +3,8 @@
 task_name: ${task.name}
 # experiment name. defaults to name of training config
 experiment: ''
+# Task:
+RL_task : '2D_sym' #2D_asym
 
 # if set to positive integer, overrides the default number of environments
 num_envs: ''
