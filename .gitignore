@@ -10,7 +10,7 @@ env/
 *.sqlite3
 *.pyc
 *.DS_Store
-runs/*
+*/runs/*
 
 
 # VS Code specific
