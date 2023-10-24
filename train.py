@@ -98,6 +98,14 @@ def parse_hydra_configs(cfg: DictConfig):
     enable_viewport = "enable_cameras" in cfg.task.sim and cfg.task.sim.enable_cameras
     env = VecEnvRLGames(headless=headless, sim_device=cfg.device_id, enable_livestream=cfg.enable_livestream, enable_viewport=enable_viewport, stream_type=cfg.stream_type)
 
+    if cfg.test:
+        cfg.task.env.numEnvs = 16
+        cfg.train.params.config.minibatch_size = 384
+    else:
+        cfg.checkpoint = ''
+        cfg.train.params.load_checkpoint = False
+        cfg.train.params.load_path = cfg.checkpoint
+    
     cfg_dict = omegaconf_to_dict(cfg)
 
     # ensure checkpoints can be specified as relative paths
@@ -106,11 +114,6 @@ def parse_hydra_configs(cfg: DictConfig):
         if cfg.checkpoint is None:
             quit()
 
-    if cfg_dict["test"]:
-        cfg_dict["task"]["env"]["numEnvs"] = 16
-        cfg_dict["train"]["params"]["config"]["minibatch_size"] = 384
-    else:
-        cfg_dict["checkpoint"] = ''
 
     print_dict(cfg_dict)
 
