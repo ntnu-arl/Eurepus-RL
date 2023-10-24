@@ -98,13 +98,20 @@ def parse_hydra_configs(cfg: DictConfig):
     enable_viewport = "enable_cameras" in cfg.task.sim and cfg.task.sim.enable_cameras
     env = VecEnvRLGames(headless=headless, sim_device=cfg.device_id, enable_livestream=cfg.enable_livestream, enable_viewport=enable_viewport, stream_type=cfg.stream_type)
 
+    cfg_dict = omegaconf_to_dict(cfg)
+
     # ensure checkpoints can be specified as relative paths
     if cfg.checkpoint:
         cfg.checkpoint = retrieve_checkpoint_path(cfg.checkpoint)
         if cfg.checkpoint is None:
             quit()
 
-    cfg_dict = omegaconf_to_dict(cfg)
+    if cfg_dict["test"]:
+        cfg_dict["task"]["env"]["numEnvs"] = 16
+        cfg_dict["train"]["params"]["config"]["minibatch_size"] = 384
+    else:
+        cfg_dict["checkpoint"] = ''
+
     print_dict(cfg_dict)
 
     # sets seed. if seed is -1 will pick a random one
