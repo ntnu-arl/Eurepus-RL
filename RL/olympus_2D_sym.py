@@ -61,9 +61,12 @@ class OlympusTask(RLTask):
         self.rew_scales["r_torque_clip"] = self._task_cfg["env"]["learn"][
             "rTorqueClipRewardScale"
         ]
+        self.rew_scales["r_collision"] = self._task_cfg["env"]["learn"]["rCollisionRewardScale"]
         self.rew_scales["total"] = self._task_cfg["env"]["learn"][
             "rewardScale"
         ]
+
+        
 
         # base init state
         pos   = self._task_cfg["env"]["baseInitState"]["pos"]
@@ -112,13 +115,15 @@ class OlympusTask(RLTask):
         self.pitch_sampeler = Uniform(init_euler_min[1],init_euler_max[1])
         self.yaw_sampeler   = Uniform(init_euler_min[2],init_euler_max[2])
 
+        # self._curriculum_scales = torch.tensor
+
         self._obs_count = 0
         self._logger = OlympusLogger()
         return
 
     def set_up_scene(self, scene) -> None:
         self.get_olympus()
-        super().set_up_scene(scene)
+        super().set_up_scene(scene, replicate_physics=False)
         self._olympusses = OlympusView(
             prim_paths_expr="/World/envs/.*/Olympus/Body", name="olympusview"
         )
@@ -156,7 +161,7 @@ class OlympusTask(RLTask):
 
         olympus = Olympus(
             prim_path=self.default_zero_env_path + "/Olympus",
-            usd_path="/Olympus-ws/Olympus-USD/Olympus/v2/olympus_v2_instancable_less_colliders.usd", # C:/Users/Finn/OneDrive - NTNU/Dokumenter/TERMIN 9/Project/Olympus-USD/Olympus/v2/olympus_v2_instanceable.usd
+            usd_path="/Olympus-ws/Olympus-USD/Olympus/v2/olympus_v2_instanceable_with_collision_groups.usd", # C:/Users/Finn/OneDrive - NTNU/Dokumenter/TERMIN 9/Project/Olympus-USD/Olympus/v2/olympus_v2_instanceable.usd
             name="Olympus",
             translation=self._olympus_translation,
         )
@@ -220,7 +225,6 @@ class OlympusTask(RLTask):
         base_angular_vel = ang_velocity #quat_rotate_inverse(base_rotation, ang_velocity) -> choose to give ang vel in world frame
         _, base_pitch, _ = get_euler_xyz(base_rotation)
         
-
         ## make dimensions of pitch and ang_vel_pitch fit that of motor_joint_pos and motor_joint_vel
         base_pitch = base_pitch.unsqueeze(dim=-1)
         base_pitch [base_pitch > torch.pi] -= 2 * torch.pi
@@ -235,7 +239,6 @@ class OlympusTask(RLTask):
             ),
             dim=-1,
         )
-
 
         self.obs_buf = obs.clone()
 
@@ -322,9 +325,9 @@ class OlympusTask(RLTask):
         # Set initial root states
         root_vel = torch.zeros((num_resets, 6), device=self._device)
 
-        roll =self.roll_sampeler.rsample((num_resets,))
-        pitch=self.pitch_sampeler.rsample((num_resets,))
-        yaw  =self.yaw_sampeler.rsample((num_resets,))
+        roll = self.roll_sampeler.rsample((num_resets,))
+        pitch= 1/6 * self.pitch_sampeler.rsample((num_resets,))
+        yaw  = self.yaw_sampeler.rsample((num_resets,))
 
         # Use if we want to reset to random position (curriculum)
         rand_rot = quat_from_euler_xyz(
@@ -342,14 +345,14 @@ class OlympusTask(RLTask):
        
         # Apply resets
         indices = env_ids.to(dtype=torch.int32)
-        self._olympusses.set_joint_positions(dof_pos, indices)
-        self._olympusses.set_joint_velocities(dof_vel, indices)
-
         self._olympusses.set_world_poses(
             self.initial_root_pos[env_ids].clone(),
             rand_rot,
             indices,
         )
+        self._olympusses.set_joint_positions(dof_pos, indices)
+        self._olympusses.set_joint_velocities(dof_vel, indices)
+
         self._olympusses.set_velocities(root_vel, indices)
 
         # Bookkeeping
@@ -447,62 +450,6 @@ class OlympusTask(RLTask):
         self.reset_idx(indices)
 
     def calculate_metrics(self) -> None:
-
-        self._collision_buff = torch.any(torch.cat([
-                torch.abs(self._olympusses.MotorHousing_FL.get_net_contact_forces(clone=False)) > 1e-5,
-                torch.abs(self._olympusses.FrontMotor_FL.get_net_contact_forces(clone=False))   > 1e-5,
-                torch.abs(self._olympusses.BackMotor_FL.get_net_contact_forces(clone=False))    > 1e-5,
-                torch.abs(self._olympusses.FrontKnee_FL.get_net_contact_forces(clone=False))    > 1e-5,
-                torch.abs(self._olympusses.BackKnee_FL.get_net_contact_forces(clone=False))     > 1e-5,
-                
-                torch.abs(self._olympusses.MotorHousing_FR.get_net_contact_forces(clone=False)) > 1e-5,
-                torch.abs(self._olympusses.FrontMotor_FR.get_net_contact_forces(clone=False))   > 1e-5,
-                torch.abs(self._olympusses.BackMotor_FR.get_net_contact_forces(clone=False))    > 1e-5,
-                torch.abs(self._olympusses.FrontKnee_FR.get_net_contact_forces(clone=False))    > 1e-5,
-                torch.abs(self._olympusses.BackKnee_FR.get_net_contact_forces(clone=False))     > 1e-5,
-                
-                torch.abs(self._olympusses.MotorHousing_BL.get_net_contact_forces(clone=False)) > 1e-5,
-                torch.abs(self._olympusses.FrontMotor_BL.get_net_contact_forces(clone=False))   > 1e-5,
-                torch.abs(self._olympusses.BackMotor_BL.get_net_contact_forces(clone=False))    > 1e-5,
-                torch.abs(self._olympusses.FrontKnee_BL.get_net_contact_forces(clone=False))    > 1e-5,
-                torch.abs(self._olympusses.BackKnee_BL.get_net_contact_forces(clone=False))     > 1e-5,
-                
-                torch.abs(self._olympusses.MotorHousing_BR.get_net_contact_forces(clone=False)) > 1e-5,
-                torch.abs(self._olympusses.FrontMotor_BR.get_net_contact_forces(clone=False))   > 1e-5,
-                torch.abs(self._olympusses.BackMotor_BR.get_net_contact_forces(clone=False))    > 1e-5,   
-                torch.abs(self._olympusses.FrontKnee_BR.get_net_contact_forces(clone=False))    > 1e-5,
-                torch.abs(self._olympusses.BackKnee_BR.get_net_contact_forces(clone=False))     > 1e-5,
-            ], dim=-1), dim=-1)
-        
-        colls = torch.cat([
-                torch.abs(self._olympusses.MotorHousing_FL.get_net_contact_forces(clone=False)) > 1e-5,
-                torch.abs(self._olympusses.FrontMotor_FL.get_net_contact_forces(clone=False))   > 1e-5,
-                torch.abs(self._olympusses.BackMotor_FL.get_net_contact_forces(clone=False))    > 1e-5,
-                torch.abs(self._olympusses.FrontKnee_FL.get_net_contact_forces(clone=False))    > 1e-5,
-                torch.abs(self._olympusses.BackKnee_FL.get_net_contact_forces(clone=False))     > 1e-5,
-                
-                torch.abs(self._olympusses.MotorHousing_FR.get_net_contact_forces(clone=False)) > 1e-5,
-                torch.abs(self._olympusses.FrontMotor_FR.get_net_contact_forces(clone=False))   > 1e-5,
-                torch.abs(self._olympusses.BackMotor_FR.get_net_contact_forces(clone=False))    > 1e-5,
-                torch.abs(self._olympusses.FrontKnee_FR.get_net_contact_forces(clone=False))    > 1e-5, #UGLY GUY
-                torch.abs(self._olympusses.BackKnee_FR.get_net_contact_forces(clone=False))     > 1e-5,
-                
-                torch.abs(self._olympusses.MotorHousing_BL.get_net_contact_forces(clone=False)) > 1e-5,
-                torch.abs(self._olympusses.FrontMotor_BL.get_net_contact_forces(clone=False))   > 1e-5,
-                torch.abs(self._olympusses.BackMotor_BL.get_net_contact_forces(clone=False))    > 1e-5,
-                torch.abs(self._olympusses.FrontKnee_BL.get_net_contact_forces(clone=False))    > 1e-5,
-                torch.abs(self._olympusses.BackKnee_BL.get_net_contact_forces(clone=False))     > 1e-5, #UGLY GUY
-                
-                torch.abs(self._olympusses.MotorHousing_BR.get_net_contact_forces(clone=False)) > 1e-5,
-                torch.abs(self._olympusses.FrontMotor_BR.get_net_contact_forces(clone=False))   > 1e-5,
-                torch.abs(self._olympusses.BackMotor_BR.get_net_contact_forces(clone=False))    > 1e-5,   
-                torch.abs(self._olympusses.FrontKnee_BR.get_net_contact_forces(clone=False))    > 1e-5,
-                torch.abs(self._olympusses.BackKnee_BR.get_net_contact_forces(clone=False))     > 1e-5,
-            ], dim=-1)
-        
-        # print(colls[0])
-        
-
         base_position, base_rotation = self._olympusses.get_world_poses(clone=False)
 
         # Calculate rew_orient which is the absolute pitch angle
@@ -527,15 +474,20 @@ class OlympusTask(RLTask):
         applied_torques = commanded_torques.clamp(-self.max_torque,self.max_torque)
         rew_torque_clip = -torch.norm(commanded_torques-applied_torques,dim=1)**2 * self.rew_scales["r_torque_clip"]
 
+        # Calculate rew_{collision}
+        self._collision_buff = self._olympusses.is_collision()
+        rew_collision        = -self._collision_buff.clone().float() * self.rew_scales["r_collision"]
+
         # Calculate total reward
         total_reward = (
             rew_orient
             + rew_base_acc
             + rew_action_clip
             + rew_torque_clip
+            + rew_collision
         ) * self.rew_scales["total"]
 
-        total_reward[self._collision_buff] -= 100 * self.rew_scales["total"]
+        # total_reward[self._collision_buff] -= 10000 * self.rew_scales["total"]
 
         # Print the average of all rewards
         # print("rew_orient:")
