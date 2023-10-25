@@ -61,7 +61,7 @@ env:
     rBaseAccRewardScale       : 0 #0.01
     rActionClipRewardScale    : 0 #0.33
     rTorqueClipRewardScale    : 0 #0.01 #0.33 
-    rCollisionRewardScale     : 1000 # Is multiplied with 1 (= "true") if collision is detected
+    rCollisionRewardScale     : 10000 # Is multiplied with 1 (= "true") if collision is detected
 
     # episode length in seconds
     episodeLength_s: 5
