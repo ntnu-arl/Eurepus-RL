@@ -111,11 +111,11 @@ class OlympusTask(RLTask):
         init_euler_min = -torch.tensor([torch.pi,torch.pi,torch.pi],device=self._device) 
         init_euler_max = torch.tensor([torch.pi,torch.pi,torch.pi],device=self._device) 
 
-        self.roll_sampeler  = Uniform(init_euler_min[0],init_euler_max[0])
-        self.pitch_sampeler = Uniform(init_euler_min[1],init_euler_max[1])
-        self.yaw_sampeler   = Uniform(init_euler_min[2],init_euler_max[2])
+        self.roll_sampler  = Uniform(init_euler_min[0],init_euler_max[0])
+        self.pitch_sampler = Uniform(init_euler_min[1],init_euler_max[1])
+        self.yaw_sampler   = Uniform(init_euler_min[2],init_euler_max[2])
 
-        # self._curriculum_scales = torch.tensor
+        self._curriculum_scale = 1/6
 
         self._obs_count = 0
         self._logger = OlympusLogger()
@@ -308,6 +308,7 @@ class OlympusTask(RLTask):
         # Set transversal targets to zero 
         self.current_clamped_targets[:, self.actuated_lateral_idx] = 0
 
+
         # Set targets
         self._olympusses.set_joint_position_targets(self.current_clamped_targets, joint_indices=self.actuated_idx)
     
@@ -325,14 +326,14 @@ class OlympusTask(RLTask):
         # Set initial root states
         root_vel = torch.zeros((num_resets, 6), device=self._device)
 
-        roll = self.roll_sampeler.rsample((num_resets,))
-        pitch= 1/6 * self.pitch_sampeler.rsample((num_resets,))
-        yaw  = self.yaw_sampeler.rsample((num_resets,))
+        roll = self._curriculum_scale * self.roll_sampler.rsample((num_resets,))
+        pitch= self._curriculum_scale * self.pitch_sampler.rsample((num_resets,))
+        yaw  = self._curriculum_scale * self.yaw_sampler.rsample((num_resets,))
 
         # Use if we want to reset to random position (curriculum)
         rand_rot = quat_from_euler_xyz(
             roll =torch.zeros_like(roll) - torch.pi/2,
-            pitch=self.pitch_sampeler.rsample((num_resets,)),
+            pitch=self.pitch_sampler.rsample((num_resets,)),
             yaw  =torch.zeros_like(yaw)
         )
 
@@ -350,10 +351,10 @@ class OlympusTask(RLTask):
             rand_rot,
             indices,
         )
+        self._olympusses.set_velocities(root_vel, indices)
+
         self._olympusses.set_joint_positions(dof_pos, indices)
         self._olympusses.set_joint_velocities(dof_vel, indices)
-
-        self._olympusses.set_velocities(root_vel, indices)
 
         # Bookkeeping
         self.reset_buf[env_ids]             = 0
@@ -487,6 +488,17 @@ class OlympusTask(RLTask):
             + rew_collision
         ) * self.rew_scales["total"]
 
+        # Add rewards to tensorboard log
+        self.extras["detailed_rewards/collision"]    = rew_collision.sum()
+        self.extras["detailed_rewards/base_acc"]     = rew_base_acc.sum()
+        self.extras["detailed_rewards/action_clip"]  = rew_action_clip.sum()
+        self.extras["detailed_rewards/torque_clip"]  = rew_torque_clip.sum()
+        self.extras["detailed_rewards/orient"]       = rew_orient.sum()
+        self.extras["detailed_rewards/total_reword"] = total_reward.sum()
+
+        print(rew_collision.sum())
+
+
         # total_reward[self._collision_buff] -= 10000 * self.rew_scales["total"]
 
         # Print the average of all rewards
@@ -520,17 +532,14 @@ class OlympusTask(RLTask):
         self.last_motor_joint_vel = motor_joint_vel.clone()
         self.last_vel             = velocity.clone()
 
-        # Place total reward in bugger
+        # Place total reward in buffer
         self.rew_buf = total_reward.detach().clone()
 
     def is_done(self) -> None:
         # reset agents
         time_out = self.progress_buf >= self.max_episode_length - 1
-
-
         reset = torch.logical_or(
             time_out, self._collision_buff
-            
         )
 
         self.reset_buf[:] = reset  #time_out

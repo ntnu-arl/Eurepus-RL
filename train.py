@@ -90,6 +90,15 @@ def parse_hydra_configs(cfg: DictConfig):
 
     time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
+    if cfg.test:
+        cfg.task.env.numEnvs = 16
+        cfg.train.params.config.minibatch_size = 384
+        cfg.enable_livestream = True
+    else:
+        cfg.checkpoint = ''
+        cfg.train.params.load_checkpoint = False
+        cfg.train.params.load_path = cfg.checkpoint
+    
     headless = cfg.headless
     rank = int(os.getenv("LOCAL_RANK", "0"))
     if cfg.multi_gpu:
@@ -98,22 +107,13 @@ def parse_hydra_configs(cfg: DictConfig):
     enable_viewport = "enable_cameras" in cfg.task.sim and cfg.task.sim.enable_cameras
     env = VecEnvRLGames(headless=headless, sim_device=cfg.device_id, enable_livestream=cfg.enable_livestream, enable_viewport=enable_viewport, stream_type=cfg.stream_type)
 
-    if cfg.test:
-        cfg.task.env.numEnvs = 16
-        cfg.train.params.config.minibatch_size = 384
-    else:
-        cfg.checkpoint = ''
-        cfg.train.params.load_checkpoint = False
-        cfg.train.params.load_path = cfg.checkpoint
-    
-    cfg_dict = omegaconf_to_dict(cfg)
-
     # ensure checkpoints can be specified as relative paths
     if cfg.checkpoint:
         cfg.checkpoint = retrieve_checkpoint_path(cfg.checkpoint)
         if cfg.checkpoint is None:
             quit()
 
+    cfg_dict = omegaconf_to_dict(cfg)
 
     print_dict(cfg_dict)
 

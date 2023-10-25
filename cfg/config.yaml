@@ -10,7 +10,7 @@ RL_task : '2D_sym' #2D_asym
 num_envs: ''
 
 # seed - set to -1 to choose random seed
-seed: 42
+seed: -1
 # set to True for deterministic performance
 torch_deterministic: False
 
@@ -44,7 +44,7 @@ checkpoint: 'runs/Olympus/nn/Olympus.pth'
 # disables rendering
 headless: True
 # enables livestream
-enable_livestream: True
+enable_livestream: False
 
 stream_type: "webRTC" #native, webRTC
 

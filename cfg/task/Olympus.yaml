@@ -4,7 +4,7 @@ name: Olympus
 physics_engine: ${..physics_engine}
 
 env:
-  numEnvs: ${resolve_default:128,${...num_envs}} #  16, 128, 1280, 2048
+  numEnvs: ${resolve_default:2048,${...num_envs}} #  16, 128, 1280, 2048
   envSpacing: 4.  # [m]
 
   clipObservations: 5.0
@@ -38,14 +38,14 @@ env:
     BackTransversalMotor_FL   : 0.00  # [rad]
     BackTransversalMotor_BR   : 0.00  # [rad]
     BackTransversalMotor_BL   : 0.00  # [rad]
-    FrontKnee_FR            : 0.00  # [rad]
-    FrontKnee_FL            : 0.00  # [rad]
-    FrontKnee_BR            : 0.00  # [rad]
-    FrontKnee_BL            : 0.00  # [rad]
-    BackKnee_FR             : 0.00  # [rad]
-    BackKnee_FL             : 0.00  # [rad]
-    BackKnee_BR             : 0.00  # [rad]
-    BackKnee_BL             : 0.00  # [rad]
+    FrontKnee_FR              : 0.00  # [rad]
+    FrontKnee_FL              : 0.00  # [rad]
+    FrontKnee_BR              : 0.00  # [rad]
+    FrontKnee_BL              : 0.00  # [rad]
+    BackKnee_FR               : 0.00  # [rad]
+    BackKnee_FL               : 0.00  # [rad]
+    BackKnee_BR               : 0.00  # [rad]
+    BackKnee_BL               : 0.00  # [rad]
   
   # Joint limits
   jointLimits:
@@ -56,11 +56,12 @@ env:
 
   learn:
     # rewards    
-    rewardScale: 0.005
-    rOrientRewardScale: 1
-    rBaseAccRewardScale: 0.01
-    rActionClipRewardScale: 0.33
-    rTorqueClipRewardScale: 0.01 #0.33 
+    rewardScale               : 0.005
+    rOrientRewardScale        : 1
+    rBaseAccRewardScale       : 0 #0.01
+    rActionClipRewardScale    : 0 #0.33
+    rTorqueClipRewardScale    : 0 #0.01 #0.33 
+    rCollisionRewardScale     : 1000 # Is multiplied with 1 (= "true") if collision is detected
 
     # episode length in seconds
     episodeLength_s: 5
@@ -72,7 +73,7 @@ sim:
   add_ground_plane: False
   use_flatcache: True
   enable_scene_query_support: False
-  disable_contact_processing: False
+  disable_contact_processing: True
 
   # set to True if you use camera sensors in the environment
   enable_cameras: False
