@@ -58,10 +58,10 @@ env:
     # rewards    
     rewardScale               : 0.005
     rOrientRewardScale        : 1
-    rBaseAccRewardScale       : 0 #0.01
+    rBaseAccRewardScale       : 0.00001 #0.01
     rActionClipRewardScale    : 0 #0.33
-    rTorqueClipRewardScale    : 0.01 #0.33 
-    rCollisionRewardScale     : 100000 # Is multiplied with 1 (= "true") if collision is detected
+    rTorqueClipRewardScale    : 0.0000001 #0.01 #0.33 
+    rCollisionRewardScale     : 1000 # Is multiplied with 1 (= "true") if collision is detected
 
     # episode length in seconds
     episodeLength_s: 5

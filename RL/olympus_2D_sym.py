@@ -115,8 +115,22 @@ class OlympusTask(RLTask):
         self.pitch_sampler = Uniform(init_euler_min[1],init_euler_max[1])
         self.yaw_sampler   = Uniform(init_euler_min[2],init_euler_max[2])
 
-        self._curriculum_scale = 1/6
+        # Initialise curriculum
+        self._curriculum_levels = torch.tensor([1/6, 2/6, 3/6, 4/6, 5/6, 6/6], device=self._device) # Factor of initial random orientation 
+        self._n_curriculum_levels = len(self._curriculum_levels)
+        self._n_times_level_completed = torch.zeros((self.num_envs,), device=self._device) #how many times the robot has completed the current level
+        self._next_level_threshold = 5 # need to complete level this number of times to go to next level
+        if self._cfg["test"]:
+            self._current_curriculum_levels = (self._n_curriculum_levels-1)*torch.ones((self.num_envs,), device=self._device) 
+            self._current_curriculum_values = self._curriculum_levels[self._n_curriculum_levels-1] * torch.ones((self.num_envs,), device=self._device)
+        else:
+            self._current_curriculum_levels = torch.zeros((self.num_envs,), device=self._device) # will be between 0 to self._n_curriculum_levels - 1 for each environment
+            self._current_curriculum_values = self._curriculum_levels[0] * torch.ones((self.num_envs,), device=self._device)
 
+        # Define orientation error to be accepted as completed 
+        self._finished_orient_error_threshold = 2 * torch.pi / 180
+
+        # Initialize logger
         self._obs_count = 0
         self._logger = OlympusLogger()
 
@@ -305,8 +319,8 @@ class OlympusTask(RLTask):
 
 
         #lineraly interpolate between min and max
-        self.current_policy_targets = (0.5*new_targets*(self.olympus_motor_joint_upper_limits-self.olympus_motor_joint_lower_limits).view(1,-1) +
-                                       0.5*(self.olympus_motor_joint_upper_limits+self.olympus_motor_joint_lower_limits).view(1,-1) )
+        self.current_policy_targets = (0.5*new_targets*(self.olympus_motor_joint_upper_limits-self.olympus_motor_joint_lower_limits) +
+                                       0.5*(self.olympus_motor_joint_upper_limits+self.olympus_motor_joint_lower_limits) )
         
         
         #clamp targets to avoid self collisions
@@ -333,15 +347,15 @@ class OlympusTask(RLTask):
         # Set initial root states
         root_vel = torch.zeros((num_resets, 6), device=self._device)
 
-        roll = self._curriculum_scale * self.roll_sampler.rsample((num_resets,))
-        pitch= self._curriculum_scale * self.pitch_sampler.rsample((num_resets,))
-        yaw  = self._curriculum_scale * self.yaw_sampler.rsample((num_resets,))
+        roll = self.roll_sampler.rsample((num_resets,))
+        pitch= self._current_curriculum_values[env_ids] * self.pitch_sampler.rsample((num_resets,))
+        yaw  = self.yaw_sampler.rsample((num_resets,))
 
         # Use if we want to reset to random position (curriculum)
         rand_rot = quat_from_euler_xyz(
-            roll =torch.zeros_like(roll) - torch.pi/2,
-            pitch=self.pitch_sampler.rsample((num_resets,)),
-            yaw  =torch.zeros_like(yaw)
+            roll = torch.zeros_like(roll) - torch.pi/2,
+            pitch= pitch,
+            yaw  = torch.zeros_like(yaw)
         )
 
         # Use if we want to reset to zero
@@ -409,16 +423,16 @@ class OlympusTask(RLTask):
         self.lateral_motor_limits     = torch.tensor(self._task_cfg["env"]["jointLimits"]["lateralMotor"], device=self._device) * torch.pi/180
         self.transversal_motor_limits = torch.tensor(self._task_cfg["env"]["jointLimits"]["transversalMotor"], device=self._device) * torch.pi/180
 
-        self.olympus_motor_joint_lower_limits = torch.zeros((self._num_actuated,), device=self._device, dtype=torch.float)
-        self.olympus_motor_joint_upper_limits = torch.zeros((self._num_actuated,), device=self._device, dtype=torch.float)
+        self.olympus_motor_joint_lower_limits = torch.zeros((1,self._num_actuated), device=self._device, dtype=torch.float)
+        self.olympus_motor_joint_upper_limits = torch.zeros((1,self._num_actuated), device=self._device, dtype=torch.float)
 
-        self.olympus_motor_joint_lower_limits[self.front_transversal_indicies ] = self.transversal_motor_limits[0]
-        self.olympus_motor_joint_lower_limits[self.back_transversal_indicies ]  = self.transversal_motor_limits[0]
-        self.olympus_motor_joint_lower_limits[self.lateral_indicies]           = self.lateral_motor_limits[0]
+        self.olympus_motor_joint_lower_limits[:,self.front_transversal_indicies ] = self.transversal_motor_limits[0]
+        self.olympus_motor_joint_lower_limits[:,self.back_transversal_indicies ]  = self.transversal_motor_limits[0]
+        self.olympus_motor_joint_lower_limits[:,self.lateral_indicies]            = self.lateral_motor_limits[0]
 
-        self.olympus_motor_joint_upper_limits[self.front_transversal_indicies] = self.transversal_motor_limits[1]
-        self.olympus_motor_joint_upper_limits[self.back_transversal_indicies ]  = self.transversal_motor_limits[1]
-        self.olympus_motor_joint_upper_limits[self.lateral_indicies]           = self.lateral_motor_limits[1]
+        self.olympus_motor_joint_upper_limits[:,self.front_transversal_indicies]  = self.transversal_motor_limits[1]
+        self.olympus_motor_joint_upper_limits[:,self.back_transversal_indicies ]  = self.transversal_motor_limits[1]
+        self.olympus_motor_joint_upper_limits[:,self.lateral_indicies]            = self.lateral_motor_limits[1]
 
         self.initial_root_pos, self.initial_root_rot = self._olympusses.get_world_poses()
         self.current_policy_targets = self.default_actuated_joints_pos.clone()
@@ -557,9 +571,30 @@ class OlympusTask(RLTask):
             time_out, self._collision_buff
         )
 
+        # Calculate if curriculum should be updated: 
+        if not self._cfg["test"] and time_out.any():
+            _, base_rotation = self._olympusses.get_world_poses(clone=False)
+            inside_threshold = (torch.abs(quat_diff_rad(base_rotation, self.zero_rot)) < self._finished_orient_error_threshold).logical_and(time_out)
+            not_inside_threshold = (torch.abs(quat_diff_rad(base_rotation, self.zero_rot)) >= self._finished_orient_error_threshold).logical_and(time_out)
+            self._n_times_level_completed += inside_threshold.int()
+            self._n_times_level_completed[not_inside_threshold] = 0 # reset t0 zero, must complete n_times with no exceptions
+
+            should_upgrade_level = (self._n_times_level_completed == self._next_level_threshold)
+            self._current_curriculum_levels += (should_upgrade_level).int()
+
+            self._current_curriculum_levels %= self._n_curriculum_levels # go back to level 0 when gone through all
+            self._current_curriculum_values = self._curriculum_levels.expand(self.num_envs,-1)[torch.arange(self.num_envs), self._current_curriculum_levels.long()]
+
+            self._n_times_level_completed[should_upgrade_level] = 0 # reset level completer counter
+
+            # log levels
+            for i in range(self._n_curriculum_levels):
+                self.extras[f"curriculum/{i}"] = (self._current_curriculum_levels == i).sum()
+
         self.reset_buf[:] = reset  #time_out
 
     def _clamp_joint_angels(self,joint_targets):
+        joint_targets = joint_targets.clamp(self.olympus_motor_joint_lower_limits, self.olympus_motor_joint_upper_limits)
 
         front_pos = joint_targets[:,self.front_transversal_indicies]
         back_pos = joint_targets[:,self.back_transversal_indicies]
