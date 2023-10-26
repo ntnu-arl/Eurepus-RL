@@ -66,7 +66,7 @@ params: # Docs: https://github.com/Denys88/rl_games#config-parameters
     critic_coef: 2
     clip_value: True
     seq_len: 4 # only for rnn
-    bounds_loss_coef: 0.001
+    bounds_loss_coef: 0 # 0.001
 
     max_epochs: ${resolve_default:1000,${....max_iterations}}
     save_best_after: 50

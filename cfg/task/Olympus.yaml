@@ -8,7 +8,7 @@ env:
   envSpacing: 4.  # [m]
 
   clipObservations: 5.0
-  clipActions: 1.0
+  clipActions: 1000.0
 
   controlFrequencyInv: 4 #old 2
 
@@ -61,7 +61,7 @@ env:
     rBaseAccRewardScale       : 0 #0.01
     rActionClipRewardScale    : 0 #0.33
     rTorqueClipRewardScale    : 0 #0.01 #0.33 
-    rCollisionRewardScale     : 10000 # Is multiplied with 1 (= "true") if collision is detected
+    rCollisionRewardScale     : 100000 # Is multiplied with 1 (= "true") if collision is detected
 
     # episode length in seconds
     episodeLength_s: 5

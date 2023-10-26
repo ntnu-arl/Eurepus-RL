@@ -98,7 +98,7 @@ class OlympusTask(RLTask):
         self._env_spacing = self._task_cfg["env"]["envSpacing"]
         # self._num_observations = 31
         # self._num_actions = 12
-        self._num_observations = 18
+        self._num_observations = 21
         self._num_actions= 4
         self._num_articulated_joints = 20
 
@@ -119,6 +119,12 @@ class OlympusTask(RLTask):
 
         self._obs_count = 0
         self._logger = OlympusLogger()
+
+        self.zero_rot = quat_from_euler_xyz(
+            roll = torch.zeros(self.num_envs, device=self._device) - torch.pi/2,
+            pitch = torch.zeros(self.num_envs, device=self._device),
+            yaw = torch.zeros(self.num_envs, device=self._device)
+        )
         return
 
     def set_up_scene(self, scene) -> None:
@@ -234,7 +240,8 @@ class OlympusTask(RLTask):
             (
                 transversal_motor_joint_pos,
                 transversal_motor_joint_vel,
-                base_pitch,
+                # base_pitch,
+                base_rotation,
                 base_angular_vel_pitch,
             ),
             dim=-1,
@@ -454,11 +461,19 @@ class OlympusTask(RLTask):
         base_position, base_rotation = self._olympusses.get_world_poses(clone=False)
 
         # Calculate rew_orient which is the absolute pitch angle
-        roll, pitch, yaw = get_euler_xyz(base_rotation)
-        pitch[pitch > torch.pi] -= 2 * torch.pi
+        # roll, pitch, yaw = get_euler_xyz(base_rotation)
+        # pitch = pitch/2
+        # pitch[pitch > torch.pi] -= 2 * torch.pi
+        # print(pitch)
 
-        reference_pitch = 0 # rad
-        rew_orient = -torch.abs(pitch - reference_pitch ) * self.rew_scales["r_orient"] * 180/torch.pi
+
+        # reference_pitch = 0 # rad
+        # rew_orient = -torch.abs(pitch - reference_pitch ) * self.rew_scales["r_orient"] * 180/torch.pi
+
+        # Quat error
+        base_target = self.zero_rot
+        # base_target[:, 0] = 1.0
+        rew_orient = -torch.abs(quat_diff_rad(base_rotation, base_target)) * self.rew_scales["r_orient"] * 180/torch.pi
 
         # Calculate rew_{base_acc}
         root_velocities = self._olympusses.get_velocities(clone=False)
@@ -496,7 +511,7 @@ class OlympusTask(RLTask):
         self.extras["detailed_rewards/orient"]       = rew_orient.sum()
         self.extras["detailed_rewards/total_reword"] = total_reward.sum()
 
-        print(rew_collision.sum())
+        # print(rew_collision.sum())
 
 
         # total_reward[self._collision_buff] -= 10000 * self.rew_scales["total"]
