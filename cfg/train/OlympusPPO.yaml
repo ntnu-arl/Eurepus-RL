@@ -59,7 +59,7 @@ params: # Docs: https://github.com/Denys88/rl_games#config-parameters
     lr_schedule: adaptive
     kl_threshold: 0.008 # target kl for adaptive lr
     truncate_grads: True
-    grad_norm: 1.
+    grad_norm: 10.
     horizon_length: 24 # Horizon length per each actor. Total number of steps will be num_actors*horizon_length * num_agents (if env is not MA num_agents==1).
     minibatch_size: 12288 # 384, 1024, 10240, 12288
     mini_epochs: 5

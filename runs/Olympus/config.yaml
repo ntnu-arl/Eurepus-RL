@@ -2,10 +2,10 @@ task:
   name: Olympus
   physics_engine: ${..physics_engine}
   env:
-    numEnvs: ${resolve_default:16,${...num_envs}}
+    numEnvs: 16
     envSpacing: 4.0
     clipObservations: 5.0
-    clipActions: 1.0
+    clipActions: 1000.0
     controlFrequencyInv: 4
     baseInitState:
       pos:
@@ -58,14 +58,15 @@ task:
       transversalMotor:
       - -60
       - 180
-      maxTransversalMotorDiff: 0
+      maxTransversalMotorDiff: 10
       maxTransversalMotorSum: 220
     learn:
       rewardScale: 0.005
       rOrientRewardScale: 1
-      rBaseAccRewardScale: 0.01
-      rActionClipRewardScale: 0.33
-      rTorqueClipRewardScale: 0.01
+      rBaseAccRewardScale: 0
+      rActionClipRewardScale: 0
+      rTorqueClipRewardScale: 0
+      rCollisionRewardScale: 100000
       episodeLength_s: 5
   sim:
     dt: 0.00208
@@ -77,7 +78,7 @@ task:
     add_ground_plane: false
     use_flatcache: true
     enable_scene_query_support: false
-    disable_contact_processing: false
+    disable_contact_processing: true
     enable_cameras: false
     default_physics_material:
       static_friction: 1.0
@@ -109,7 +110,7 @@ task:
       gpu_max_num_partitions: 8
     Olympus:
       override_usd_defaults: false
-      enable_self_collisions: false
+      enable_self_collisions: true
       enable_gyroscopic_forces: true
       solver_position_iteration_count: 4
       solver_velocity_iteration_count: 1
@@ -139,10 +140,10 @@ train:
           fixed_sigma: true
       mlp:
         units:
-        - 256
         - 128
-        - 64
-        activation: elu
+        - 128
+        - 128
+        activation: tanh
         d2rl: false
         initializer:
           name: default
@@ -174,23 +175,24 @@ train:
       lr_schedule: adaptive
       kl_threshold: 0.008
       truncate_grads: true
-      grad_norm: 1.0
+      grad_norm: 10.0
       horizon_length: 24
       minibatch_size: 384
       mini_epochs: 5
       critic_coef: 2
       clip_value: true
       seq_len: 4
-      bounds_loss_coef: 0.001
+      bounds_loss_coef: 0
       max_epochs: ${resolve_default:1000,${....max_iterations}}
-      save_best_after: 200
+      save_best_after: 50
       score_to_win: 20000
       save_frequency: 50
       print_stats: true
 task_name: ${task.name}
 experiment: ''
+RL_task: 2D_sym
 num_envs: ''
-seed: 42
+seed: 465
 torch_deterministic: false
 max_iterations: ''
 physics_engine: physx
@@ -205,7 +207,7 @@ test: true
 checkpoint: /Olympus-ws/in-air-stabilization/runs/Olympus/nn/Olympus.pth
 headless: true
 enable_livestream: true
-stream_type: native
+stream_type: webRTC
 mt_timeout: 30
 wandb_activate: false
 wandb_group: ''

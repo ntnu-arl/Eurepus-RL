@@ -11,6 +11,8 @@ env/
 *.pyc
 *.DS_Store
 */runs/*
+runs
+utils
 
 
 # VS Code specific
