@@ -49,7 +49,7 @@ env:
   
   # Joint limits
   jointLimits:
-    lateralMotor              : [-10, 200]  # [deg]
+    lateralMotor              : [-10, 210]  # [deg]
     transversalMotor          : [-60, 180]  # [deg]
     maxTransversalMotorDiff   : 10           # [deg]
     maxTransversalMotorSum    : 220         # [deg]
@@ -67,7 +67,7 @@ env:
     rOrientRewardTemp         : 0.5
 
     # episode length in seconds
-    episodeLength_s: 5
+    episodeLength_s: 3
 
 sim:
   dt: 0.00208

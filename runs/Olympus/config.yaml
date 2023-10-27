@@ -54,7 +54,7 @@ task:
     jointLimits:
       lateralMotor:
       - -10
-      - 200
+      - 210
       transversalMotor:
       - -60
       - 180
@@ -68,7 +68,7 @@ task:
       rTorqueClipRewardScale: 0.0
       rCollisionRewardScale: 10
       rOrientRewardTemp: 0.5
-      episodeLength_s: 5
+      episodeLength_s: 3
   sim:
     dt: 0.00208
     use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
@@ -191,9 +191,9 @@ train:
       print_stats: true
 task_name: ${task.name}
 experiment: ''
-RL_task: 2D_sym
+RL_task: 3D
 num_envs: ''
-seed: 4171
+seed: 1526
 torch_deterministic: false
 max_iterations: ''
 physics_engine: physx
