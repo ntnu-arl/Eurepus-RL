@@ -4,13 +4,13 @@ task_name: ${task.name}
 # experiment name. defaults to name of training config
 experiment: ''
 # Task:
-RL_task : '2D_sym' #2D_asym
+RL_task : '2D_sym' # 2D_sym or 2D_asym
 
 # if set to positive integer, overrides the default number of environments
 num_envs: ''
 
 # seed - set to -1 to choose random seed
-seed: 42
+seed: -1
 # set to True for deterministic performance
 torch_deterministic: False
 
@@ -38,14 +38,15 @@ solver_type: 0 # 0: pgs, 1: tgs
 # test - if set, run policy in inference mode (requires setting checkpoint to load)
 test: False
 # used to set checkpoint path
-checkpoint: '' #'runs/Olympus/nn/Olympus.pth'
+# This is automatically set to '' when running in train mode
+checkpoint: 'runs/Olympus/nn/Olympus.pth'
 
 # disables rendering
 headless: True
 # enables livestream
-enable_livestream: True
+enable_livestream: False
 
-stream_type: "webRTC" #native, webRTC
+stream_type: "native" #native, webRTC
 
 # timeout for MT script
 mt_timeout: 30
