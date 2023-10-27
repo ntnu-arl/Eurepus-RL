@@ -63,10 +63,11 @@ task:
     learn:
       rewardScale: 0.005
       rOrientRewardScale: 1
-      rBaseAccRewardScale: 1.0e-05
+      rBaseAccRewardScale: 0.0
       rActionClipRewardScale: 0
-      rTorqueClipRewardScale: 1.0e-07
-      rCollisionRewardScale: 1000
+      rTorqueClipRewardScale: 0.0
+      rCollisionRewardScale: 10
+      rOrientRewardTemp: 0.5
       episodeLength_s: 5
   sim:
     dt: 0.00208
@@ -176,7 +177,7 @@ train:
       kl_threshold: 0.008
       truncate_grads: true
       grad_norm: 10.0
-      horizon_length: 24
+      horizon_length: 48
       minibatch_size: 384
       mini_epochs: 5
       critic_coef: 2
@@ -192,7 +193,7 @@ task_name: ${task.name}
 experiment: ''
 RL_task: 2D_sym
 num_envs: ''
-seed: 5579
+seed: 4171
 torch_deterministic: false
 max_iterations: ''
 physics_engine: physx
@@ -204,10 +205,10 @@ multi_gpu: false
 num_threads: 4
 solver_type: 0
 test: true
-checkpoint: /Olympus-ws/in-air-stabilization/runs/Olympus/nn/last_Olympus_ep_1000_rew__-52.68813_.pth
+checkpoint: /Olympus-ws/in-air-stabilization/runs/Olympus/nn/Olympus.pth
 headless: true
 enable_livestream: true
-stream_type: webRTC
+stream_type: native
 mt_timeout: 30
 wandb_activate: false
 wandb_group: ''

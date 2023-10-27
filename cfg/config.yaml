@@ -4,7 +4,7 @@ task_name: ${task.name}
 # experiment name. defaults to name of training config
 experiment: ''
 # Task:
-RL_task : '2D_sym' #2D_asym
+RL_task : '2D_sym' # 2D_sym or 2D_asym
 
 # if set to positive integer, overrides the default number of environments
 num_envs: ''
@@ -39,14 +39,14 @@ solver_type: 0 # 0: pgs, 1: tgs
 test: False
 # used to set checkpoint path
 # This is automatically set to '' when running in train mode
-checkpoint: 'runs/Olympus/nn/last_Olympus_ep_1000_rew__-52.68813_.pth'
+checkpoint: 'runs/Olympus/nn/Olympus.pth'
 
 # disables rendering
 headless: True
 # enables livestream
 enable_livestream: False
 
-stream_type: "webRTC" #native, webRTC
+stream_type: "native" #native, webRTC
 
 # timeout for MT script
 mt_timeout: 30
