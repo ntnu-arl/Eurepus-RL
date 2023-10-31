@@ -4,7 +4,7 @@ task:
   env:
     numEnvs: 16
     envSpacing: 4.0
-    clipObservations: 5.0
+    clipObservations: 1000.0
     clipActions: 1000.0
     controlFrequencyInv: 4
     baseInitState:
@@ -54,21 +54,24 @@ task:
     jointLimits:
       lateralMotor:
       - -10
-      - 210
+      - 180
       transversalMotor:
       - -60
       - 180
       maxTransversalMotorDiff: 10
       maxTransversalMotorSum: 220
     learn:
-      rewardScale: 0.005
+      rewardScale: 1
       rOrientRewardScale: 1
+      rOrientImprovedRewardScale: 0.0
       rBaseAccRewardScale: 0.0
-      rActionClipRewardScale: 0
+      rActionClipRewardScale: 0.0
       rTorqueClipRewardScale: 0.0
-      rCollisionRewardScale: 10
-      rOrientRewardTemp: 0.5
-      episodeLength_s: 3
+      rCollisionRewardScale: 0.0
+      rIsDoneRewardScale: 1000
+      rInsideThresholdRewardScale: 500
+      rOrientRewardTemp: 0.1
+      episodeLength_s: 5
   sim:
     dt: 0.00208
     use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
@@ -141,10 +144,10 @@ train:
           fixed_sigma: true
       mlp:
         units:
+        - 256
         - 128
-        - 128
-        - 128
-        activation: tanh
+        - 64
+        activation: elu
         d2rl: false
         initializer:
           name: default
@@ -177,14 +180,14 @@ train:
       kl_threshold: 0.008
       truncate_grads: true
       grad_norm: 10.0
-      horizon_length: 48
+      horizon_length: 60
       minibatch_size: 384
       mini_epochs: 5
       critic_coef: 2
       clip_value: true
       seq_len: 4
       bounds_loss_coef: 0
-      max_epochs: ${resolve_default:1000,${....max_iterations}}
+      max_epochs: ${resolve_default:2000,${....max_iterations}}
       save_best_after: 50
       score_to_win: 20000
       save_frequency: 50
@@ -193,7 +196,7 @@ task_name: ${task.name}
 experiment: ''
 RL_task: 3D
 num_envs: ''
-seed: 1526
+seed: 8691
 torch_deterministic: false
 max_iterations: ''
 physics_engine: physx
@@ -205,7 +208,7 @@ multi_gpu: false
 num_threads: 4
 solver_type: 0
 test: true
-checkpoint: /Olympus-ws/in-air-stabilization/runs/Olympus/nn/Olympus.pth
+checkpoint: /Olympus-ws/in-air-stabilization/runs/Olympus/nn/last_Olympus_ep_1800_rew_478.88882.pth
 headless: true
 enable_livestream: true
 stream_type: native
