@@ -4,7 +4,7 @@ name: Olympus
 physics_engine: ${..physics_engine}
 
 env:
-  numEnvs: ${resolve_default:4096,${...num_envs}} #  16, 128, 1280, 2048, 4096
+  numEnvs: ${resolve_default:16,${...num_envs}} #  16, 128, 1280, 2048, 4096
   envSpacing: 4.  # [m]
 
   clipObservations: 1000.0
@@ -63,12 +63,18 @@ env:
     rActionClipRewardScale    : 0.0 #0.33
     rTorqueClipRewardScale    : 0.0 #0.01 #0.33 
     rCollisionRewardScale     : 0.0 # Is multiplied with 1 (= "true") if collision is detected
-    rIsDoneRewardScale        : 1000
+    rIsDoneRewardScale        : 300
     rInsideThresholdRewardScale: 500 # Is multiplied with 1 (= "true") if innside threshold when reset
 
-
-    # temperatures
-    rOrientRewardTemp         : 0.1
+    # Curriculum temperatures
+    # The number of items automatically determines the number of curriculum steps
+    cLowerAngleBound          : [0, 0.33, 0.66] # In percentage of pi/180
+    cUpperAngleBound          : [0.33, 0.66, 1] # In percentage of pi/180
+    cOrientRewardTemp         : [0.25, 0.5, 0.7]
+    cNextLevelThreshold       : 5 # How many times the current level has to be succesfully done in a row before next level is unlocked
+    
+    # Do be succesful threshold -> determines when a level is regarded as completed succesfully 
+    angleErrorThreshold       : 2 # in degress
 
     # episode length in seconds
     episodeLength_s: 5

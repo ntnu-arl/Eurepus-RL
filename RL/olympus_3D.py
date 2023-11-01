@@ -35,10 +35,11 @@ from omniisaacgymenvs.tasks.utils.usd_utils import set_drive
 
 from omni.isaac.core.utils.torch.rotations import (
     quat_rotate,
-    quat_rotate_inverse,
+    quat_mul,
     get_euler_xyz,
     quat_diff_rad,
     quat_from_euler_xyz,
+    quat_from_angle_axis,
 )
 from omni.isaac.core.utils.types import ArticulationAction
 from omni.isaac.core.utils.prims import get_prim_at_path
@@ -65,10 +66,6 @@ class OlympusTask(RLTask):
         self.rew_scales["r_orient_improved"] = self._task_cfg["env"]["learn"]["rOrientImprovedRewardScale"]
         self.rew_scales["r_is_done"] = self._task_cfg["env"]["learn"]["rIsDoneRewardScale"]
         self.rew_scales["total"] = self._task_cfg["env"]["learn"]["rewardScale"]
-
-        # rewardd temperatures
-        self.rew_temps = {}
-        self.rew_temps["r_orient"] = self._task_cfg["env"]["learn"]["rOrientRewardTemp"]
 
         # base init state
         pos = self._task_cfg["env"]["baseInitState"]["pos"]
@@ -98,8 +95,6 @@ class OlympusTask(RLTask):
         self._num_envs = self._task_cfg["env"]["numEnvs"]
         self._olympus_translation = torch.tensor(self._task_cfg["env"]["baseInitState"]["pos"])
         self._env_spacing = self._task_cfg["env"]["envSpacing"]
-        # self._num_observations = 31
-        # self._num_actions = 12
         self._num_observations = 31
         self._num_actions = 12
         self._num_articulated_joints = 20
@@ -113,42 +108,60 @@ class OlympusTask(RLTask):
 
         RLTask.__init__(self, name, env)
 
-        # Random initial euler angles after reset
-        init_euler_min = -torch.tensor([torch.pi, torch.pi, torch.pi], device=self._device)
-        init_euler_max = torch.tensor([torch.pi, torch.pi, torch.pi], device=self._device)
-
-        self.roll_sampler = Uniform(init_euler_min[0], init_euler_max[0])
-        self.pitch_sampler = Uniform(init_euler_min[1], init_euler_max[1])
-        self.yaw_sampler = Uniform(init_euler_min[2], init_euler_max[2])
+        # Random initial axis-angle after reset
+        self._phi_sampler = Uniform(torch.tensor(0.0, device=self._device), torch.pi)
+        self._theta_sampler = Uniform(torch.tensor(-torch.pi, device=self._device), torch.pi)
+        self._norm_angle_sampler = Uniform(
+            torch.tensor(0.0, device=self._device), 1
+        )  # This will be transformed by current curriculum values
 
         # Initialise curriculum
-        self._curriculum_levels = torch.tensor(
-            [1 / 6, 1 / 3, 1], device=self._device
-        )  # Factor of initial random orientation
-        self._curriculum_orient_temps = torch.tensor([0.1, 0.25, 0.7], device=self._device).expand(self.num_envs, -1)
+        # Lower bound for angle curriculum
+        self._lower_curriculum_levels = (
+            torch.tensor(self._task_cfg["env"]["learn"]["cLowerAngleBound"], device=self._device).expand(
+                self.num_envs, -1
+            )
+            * torch.pi
+        )
+        # Upper bound for angle curriculum
+        self._upper_curriculum_levels = (
+            torch.tensor(self._task_cfg["env"]["learn"]["cUpperAngleBound"], device=self._device).expand(
+                self.num_envs, -1
+            )
+            * torch.pi
+        )
+        # Temperature for orient reward
+        self._curriculum_orient_temps = torch.tensor(
+            self._task_cfg["env"]["learn"]["cOrientRewardTemp"], device=self._device
+        ).expand(self.num_envs, -1)
 
-        self._n_curriculum_levels = len(self._curriculum_levels)
+        # Assert that number of levels is the same for lower and upper curriculum and temperature
+        assert (
+            self._lower_curriculum_levels.shape == self._upper_curriculum_levels.shape
+            and self._lower_curriculum_levels.shape == self._curriculum_orient_temps.shape
+        ), "Curriculum levels and temperature have different shapes"
+
+        # Assert that the curriculum levels are in ascending order
+        assert torch.all(
+            torch.all(self._lower_curriculum_levels < self._upper_curriculum_levels, dim=1)
+        ), "Curriculum levels are not in ascending order"
+
+        self._n_curriculum_levels = self._lower_curriculum_levels.shape[-1]
         self._n_times_level_completed = torch.zeros(
             (self.num_envs,), device=self._device
         )  # how many times the robot has completed the current level
-        self._next_level_threshold = 5  # need to complete level this number of times to go to next level
+        self._next_level_threshold = self._task_cfg["env"]["learn"][
+            "cNextLevelThreshold"
+        ]  # need to complete level this number of times to go to next level
         if self._cfg["test"]:
-            self._current_curriculum_levels = (self._n_curriculum_levels - 2) * torch.ones(
-                (self.num_envs,), device=self._device
-            )
-            self._current_curriculum_values = self._curriculum_levels[self._n_curriculum_levels - 2] * torch.ones(
-                (self.num_envs,), device=self._device
+            self._current_curriculum_levels = (self._n_curriculum_levels - 1) * torch.ones(
+                (self.num_envs,), dtype=torch.long, device=self._device
             )
         else:
-            self._current_curriculum_levels = torch.zeros(
-                (self.num_envs,), device=self._device
-            )  # will be between 0 to self._n_curriculum_levels - 1 for each environment
-            self._current_curriculum_values = self._curriculum_levels[0] * torch.ones(
-                (self.num_envs,), device=self._device
-            )
+            self._current_curriculum_levels = torch.zeros((self.num_envs,), dtype=torch.long, device=self._device)
 
         # Define orientation error to be accepted as completed
-        self._finished_orient_error_threshold = 2 * torch.pi / 180
+        self._finished_orient_error_threshold = self._task_cfg["env"]["learn"]["angleErrorThreshold"] * torch.pi / 180
         self._inside_threshold = torch.zeros((self.num_envs,), device=self._device)
 
         self._last_orient_error = torch.pi * torch.ones((self.num_envs,), device=self._device)
@@ -338,17 +351,20 @@ class OlympusTask(RLTask):
         # Set initial root states
         root_vel = torch.zeros((num_resets, 6), device=self._device)
 
-        roll = self._current_curriculum_values[env_ids] * self.roll_sampler.rsample((num_resets,))
-        pitch = self._current_curriculum_values[env_ids] * self.pitch_sampler.rsample((num_resets,))
-        yaw = self._current_curriculum_values[env_ids] * self.yaw_sampler.rsample((num_resets,))
+        # Get random axis and angle
+        phi = self._phi_sampler.rsample((num_resets,))
+        theta = self._theta_sampler.rsample((num_resets,))
+        axis = random_axis(phi, theta)
 
-        # Use if we want to reset to random position (curriculum)
-        rand_rot = quat_from_euler_xyz(roll=roll - torch.pi / 2, pitch=pitch, yaw=yaw)
+        normalized_angle = self._norm_angle_sampler.rsample((num_resets,))
+        lower_bound = self._lower_curriculum_levels[env_ids, self._current_curriculum_levels[env_ids]]
+        upper_bound = self._upper_curriculum_levels[env_ids, self._current_curriculum_levels[env_ids]]
+        angle = transform_random_angle(normalized_angle, lower_bound, upper_bound)
 
-        # Use if we want to reset to zero
-        zero_rot = quat_from_euler_xyz(
-            roll=torch.zeros_like(roll) - torch.pi / 2, pitch=torch.zeros_like(pitch), yaw=torch.zeros_like(yaw)
-        )
+        rand_rot = quat_from_angle_axis(angle, axis)
+
+        # Rotate rand_rot to be aligned with the ground
+        rand_rot = quat_mul(rand_rot, self.zero_rot[env_ids])
 
         # Apply resets
         indices = env_ids.to(dtype=torch.int32)
@@ -510,8 +526,8 @@ class OlympusTask(RLTask):
         rew_innside_threshold = self._inside_threshold.clone().float() * self.rew_scales["r_inside_threshold"]
 
         # Calculate rew_{is_done}
-        self.rew_is_done = torch.zeros_like(self.reset_buf, dtype=torch.float)
-        self.rew_is_done[self.reset_buf] = -orient_error[self.reset_buf] * self.rew_scales["r_is_done"]
+        rew_is_done = torch.zeros_like(self.reset_buf, dtype=torch.float)
+        rew_is_done[self.reset_buf] = -orient_error[self.reset_buf] * self.rew_scales["r_is_done"]
 
         # Calculate total reward
         total_reward = (
@@ -521,6 +537,7 @@ class OlympusTask(RLTask):
             + rew_torque_clip
             + rew_collision
             + rew_innside_threshold
+            + rew_is_done
             + rew_orient_improved
         ) * self.rew_scales["total"]
 
@@ -532,7 +549,7 @@ class OlympusTask(RLTask):
         self.extras["detailed_rewards/orient"] = rew_orient.sum()
         self.extras["detailed_rewards/inside_threshold"] = rew_innside_threshold.sum()
         self.extras["detailed_rewards/orient_improved"] = rew_orient_improved.sum()
-        self.extras["detailed_rewards/is_done"] = self.rew_is_done.sum()
+        self.extras["detailed_rewards/is_done"] = rew_is_done.sum()
         self.extras["detailed_rewards/total_reword"] = total_reward.sum()
 
         # Save last values
@@ -568,10 +585,6 @@ class OlympusTask(RLTask):
             self._current_curriculum_levels += (should_upgrade_level).int()
 
             self._current_curriculum_levels %= self._n_curriculum_levels  # go back to level 0 when gone through all
-            self._current_curriculum_values = self._curriculum_levels.expand(self.num_envs, -1)[
-                torch.arange(self.num_envs), self._current_curriculum_levels.long()
-            ]
-
             self._n_times_level_completed[should_upgrade_level] = 0  # reset level completer counter
 
             # log levels
@@ -626,3 +639,21 @@ class OlympusTask(RLTask):
         joint_targets[:, self.front_transversal_indicies] = front_pos
         joint_targets[:, self.back_transversal_indicies] = back_pos
         return joint_targets
+
+
+# Helper functions
+# @torch.jit.script
+def random_axis(phi, theta):
+    return torch.stack(
+        (
+            torch.sin(phi) * torch.cos(theta),
+            torch.sin(phi) * torch.sin(theta),
+            torch.cos(phi),
+        ),
+        dim=-1,
+    )
+
+
+# @torch.jit.script
+def transform_random_angle(normalized_angles, lower_bound, upper_bound):
+    return (upper_bound - lower_bound) * normalized_angles + lower_bound
