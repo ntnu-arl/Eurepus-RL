@@ -61,6 +61,8 @@ class OlympusTask(RLTask):
         self.rew_scales["r_action_clip"] = self._task_cfg["env"]["learn"]["rActionClipRewardScale"]
         self.rew_scales["r_torque_clip"] = self._task_cfg["env"]["learn"]["rTorqueClipRewardScale"]
         self.rew_scales["r_collision"] = self._task_cfg["env"]["learn"]["rCollisionRewardScale"]
+        self.rew_scales["r_is_done"] = self._task_cfg["env"]["learn"]["rIsDoneRewardScale"]
+        self.rew_scales["r_inside_threshold"] = self._task_cfg["env"]["learn"]["rInsideThresholdRewardScale"]
         self.rew_scales["total"] = self._task_cfg["env"]["learn"]["rewardScale"]
 
         # rewardd temperatures
@@ -152,6 +154,10 @@ class OlympusTask(RLTask):
             pitch=torch.zeros(self.num_envs, device=self._device),
             yaw=torch.zeros(self.num_envs, device=self._device),
         )
+
+        # Define orientation error to be accepted as completed
+        self._finished_orient_error_threshold = 2 * torch.pi / 180
+        self._inside_threshold = torch.zeros((self.num_envs,), device=self._device)
         return
 
     def set_up_scene(self, scene) -> None:
@@ -191,7 +197,7 @@ class OlympusTask(RLTask):
     def get_olympus(self):
         olympus = Olympus(
             prim_path=self.default_zero_env_path + "/Olympus",
-            usd_path="/Olympus-ws/Olympus-USD/Olympus/v2/olympus_v2_instanceable_with_collision_groups.usd",  # C:/Users/Finn/OneDrive - NTNU/Dokumenter/TERMIN 9/Project/Olympus-USD/Olympus/v2/olympus_v2_instanceable.usd
+            usd_path="/Olympus-ws/Olympus-USD/Olympus/v2/olympus_v2_instanceable.usd",  # C:/Users/Finn/OneDrive - NTNU/Dokumenter/TERMIN 9/Project/Olympus-USD/Olympus/v2/olympus_v2_instanceable.usd
             name="Olympus",
             translation=self._olympus_translation,
         )
@@ -263,6 +269,23 @@ class OlympusTask(RLTask):
             dim=-1,
         )
 
+        nan_obs = torch.cat(
+            (
+                motor_joint_pos,
+                motor_joint_vel,
+                base_rotation,
+                root_velocities,
+            ),
+            dim=-1,
+        )
+
+        nan_mask = torch.isnan(obs)
+        obs[nan_mask] = 0
+
+        full_nan_mask = torch.isnan(nan_obs)
+        self.any_nan_obs_mask = torch.any(full_nan_mask,dim=-1)
+
+
         self.obs_buf = obs.clone()
 
         observations = {self._olympusses.name: {"obs_buf": self.obs_buf}}
@@ -299,6 +322,28 @@ class OlympusTask(RLTask):
 
         # Apply spring
         # self._olympusses.apply_action(spring_actions)
+    
+    def post_physics_step(self):
+        """ Processes RL required computations for observations, states, rewards, resets, and extras.
+            Also maintains progress buffer for tracking step count per environment.
+
+        Returns:
+            obs_buf(torch.Tensor): Tensor of observation data.
+            rew_buf(torch.Tensor): Tensor of rewards data.
+            reset_buf(torch.Tensor): Tensor of resets/dones data.
+            extras(dict): Dictionary of extras data.
+        """
+
+        self.progress_buf[:] += 1
+
+        if self._env._world.is_playing():
+            self.get_observations()
+            self.get_states()
+            self.is_done()
+            self.calculate_metrics()
+            self.get_extras()
+
+        return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
 
     def apply_control(self, actions) -> None:
         """
@@ -459,18 +504,8 @@ class OlympusTask(RLTask):
     def calculate_metrics(self) -> None:
         base_position, base_rotation = self._olympusses.get_world_poses(clone=False)
 
-        # Calculate rew_orient which is the absolute pitch angle
-        # roll, pitch, yaw = get_euler_xyz(base_rotation)
-        # pitch = pitch/2
-        # pitch[pitch > torch.pi] -= 2 * torch.pi
-        # print(pitch)
-
-        # reference_pitch = 0 # rad
-        # rew_orient = -torch.abs(pitch - reference_pitch ) * self.rew_scales["r_orient"] * 180/torch.pi
-
         # Quat error
         base_target = self.zero_rot
-        # base_target[:, 0] = 1.0
         orient_error = torch.abs(quat_diff_rad(base_rotation, base_target))
         rew_orient = torch.exp(-orient_error / self.rew_temps["r_orient"]) * self.rew_scales["r_orient"]
 
@@ -498,13 +533,26 @@ class OlympusTask(RLTask):
         )
 
         # Calculate rew_{collision}
-        self._collision_buff = self._olympusses.is_collision()
         rew_collision = -self._collision_buff.clone().float() * self.rew_scales["r_collision"]
+
+        # Calculate rew_{is_done}
+        self.rew_is_done = torch.zeros_like(self.time_out, dtype=torch.float)
+        self.rew_is_done[self.time_out] = (torch.pi/2 -orient_error[self.time_out]) * self.rew_scales["r_is_done"] #torch.pi/2
+
+
+        # Calculate inside threshold reward
+        self._inside_threshold = (
+                torch.abs(quat_diff_rad(base_rotation, self.zero_rot)) < self._finished_orient_error_threshold
+            ).logical_and(self.time_out)
+        rew_innside_threshold = self._inside_threshold.clone().float() * self.rew_scales["r_inside_threshold"]
+
 
         # Calculate total reward
         total_reward = (
-            rew_orient + rew_base_acc + rew_action_clip + rew_torque_clip + rew_collision
+            rew_orient + self.rew_is_done + rew_innside_threshold # + rew_collision + rew_base_acc + rew_action_clip + rew_torque_clip 
         ) * self.rew_scales["total"]
+
+        total_reward[self.any_nan_obs_mask] = 0
 
         # Add rewards to tensorboard log
         self.extras["detailed_rewards/collision"] = rew_collision.sum()
@@ -512,36 +560,10 @@ class OlympusTask(RLTask):
         self.extras["detailed_rewards/action_clip"] = rew_action_clip.sum()
         self.extras["detailed_rewards/torque_clip"] = rew_torque_clip.sum()
         self.extras["detailed_rewards/orient"] = rew_orient.sum()
+        self.extras["detailed_rewards/is_done"] = self.rew_is_done.sum()
+        self.extras["detailed_rewards/is_within_threshold"] = rew_innside_threshold.sum()
         self.extras["detailed_rewards/total_reword"] = total_reward.sum()
 
-        # print(rew_collision.sum())
-
-        # total_reward[self._collision_buff] -= 10000 * self.rew_scales["total"]
-
-        # Print the average of all rewards
-        # print("rew_orient:")
-        # print("Max:", torch.max(rew_orient).item())
-        # print("Min:", torch.min(rew_orient).item())
-        # print("Average:", torch.mean(rew_orient).item())
-        # print("\n")
-
-        # print("rew_base_acc:")
-        # print("Max:", torch.max(rew_base_acc).item())
-        # print("Min:", torch.min(rew_base_acc).item())
-        # print("Average:", torch.mean(rew_base_acc).item())
-        # print("\n")
-
-        # print("rew_action_clip:")
-        # print("Max:", torch.max(rew_action_clip).item())
-        # print("Min:", torch.min(rew_action_clip).item())
-        # print("Average:", torch.mean(rew_action_clip).item())
-        # print("\n")
-
-        # print("rew_torque_clip:")
-        # print("Max:", torch.max(rew_torque_clip).item())
-        # print("Min:", torch.min(rew_torque_clip).item())
-        # print("Average:", torch.mean(rew_torque_clip).item())
-        # print("\n")
 
         # Save last values
         self.last_actions = self.actions.clone()
@@ -552,42 +574,44 @@ class OlympusTask(RLTask):
         self.rew_buf = total_reward.detach().clone()
 
     def is_done(self) -> None:
+        self._collision_buff = self._olympusses.is_collision()
         # reset agents
-        time_out = self.progress_buf >= self.max_episode_length - 1
-        reset = torch.logical_or(time_out, self._collision_buff)
+        self.time_out = self.progress_buf >= self.max_episode_length - 1
+        reset = torch.logical_or(self.time_out, self._collision_buff)
+        reset = torch.logical_or(reset, self.any_nan_obs_mask)
 
-        # Calculate if curriculum should be updated:
-        if not self._cfg["test"] and time_out.any():
-            _, base_rotation = self._olympusses.get_world_poses(clone=False)
-            inside_threshold = (
-                torch.abs(quat_diff_rad(base_rotation, self.zero_rot)) < self._finished_orient_error_threshold
-            ).logical_and(time_out)
-            not_inside_threshold = (
-                torch.abs(quat_diff_rad(base_rotation, self.zero_rot)) >= self._finished_orient_error_threshold
-            ).logical_and(time_out)
-            self._n_times_level_completed += inside_threshold.int()
-            self._n_times_level_completed[
-                not_inside_threshold
-            ] = 0  # reset t0 zero, must complete n_times with no exceptions
 
-            should_upgrade_level = self._n_times_level_completed == self._next_level_threshold
-            self._current_curriculum_levels += (should_upgrade_level).int()
+        # # Calculate if curriculum should be updated:
+        # if not self._cfg["test"] and time_out.any():
+        #     _, base_rotation = self._olympusses.get_world_poses(clone=False)
+        #     inside_threshold = (
+        #         torch.abs(quat_diff_rad(base_rotation, self.zero_rot)) < self._finished_orient_error_threshold
+        #     ).logical_and(time_out)
+        #     not_inside_threshold = (
+        #         torch.abs(quat_diff_rad(base_rotation, self.zero_rot)) >= self._finished_orient_error_threshold
+        #     ).logical_and(time_out)
+        #     self._n_times_level_completed += inside_threshold.int()
+        #     self._n_times_level_completed[
+        #         not_inside_threshold
+        #     ] = 0  # reset t0 zero, must complete n_times with no exceptions
 
-            self._current_curriculum_levels %= self._n_curriculum_levels  # go back to level 0 when gone through all
-            self._current_curriculum_values = self._curriculum_levels.expand(self.num_envs, -1)[
-                torch.arange(self.num_envs), self._current_curriculum_levels.long()
-            ]
+        #     should_upgrade_level = self._n_times_level_completed == self._next_level_threshold
+        #     self._current_curriculum_levels += (should_upgrade_level).int()
 
-            self._n_times_level_completed[should_upgrade_level] = 0  # reset level completer counter
+        #     self._current_curriculum_levels %= self._n_curriculum_levels  # go back to level 0 when gone through all
+        #     self._current_curriculum_values = self._curriculum_levels.expand(self.num_envs, -1)[
+        #         torch.arange(self.num_envs), self._current_curriculum_levels.long()
+        #     ]
 
-            # log levels
-            for i in range(self._n_curriculum_levels):
-                self.extras[f"curriculum/{i}"] = (self._current_curriculum_levels == i).sum()
+        #     self._n_times_level_completed[should_upgrade_level] = 0  # reset level completer counter
+
+        #     # log levels
+        #     for i in range(self._n_curriculum_levels):
+        #         self.extras[f"curriculum/{i}"] = (self._current_curriculum_levels == i).sum()
 
         self.reset_buf[:] = reset  # time_out
 
     def _clamp_joint_angels(self, joint_targets):
-        clamped_targets = joint_targets.clone()
         joint_targets = joint_targets.clamp(
             self.olympus_motor_joint_lower_limits, self.olympus_motor_joint_upper_limits
         )
@@ -604,6 +628,6 @@ class OlympusTask(RLTask):
         front_pos[clamp_mask_wide] -= (motor_joint_sum[clamp_mask_wide] - self._max_transversal_motor_sum) / 2
         back_pos[clamp_mask_wide] -= (motor_joint_sum[clamp_mask_wide] - self._max_transversal_motor_sum) / 2
 
-        clamped_targets[:, self.front_transversal_indicies] = front_pos
-        clamped_targets[:, self.back_transversal_indicies] = back_pos
-        return clamped_targets
+        joint_targets[:, self.front_transversal_indicies] = front_pos
+        joint_targets[:, self.back_transversal_indicies] = back_pos
+        return joint_targets

@@ -4,10 +4,10 @@ name: Olympus
 physics_engine: ${..physics_engine}
 
 env:
-  numEnvs: ${resolve_default:2048,${...num_envs}} #  16, 128, 1280, 2048
+  numEnvs: ${resolve_default:4096,${...num_envs}} #  16, 128, 1280, 2048
   envSpacing: 4.  # [m]
 
-  clipObservations: 5.0
+  clipObservations: 1000 #5.0
   clipActions: 1000.0
 
   controlFrequencyInv: 4 #old 2
@@ -49,22 +49,24 @@ env:
   
   # Joint limits
   jointLimits:
-    lateralMotor              : [-10, 210]  # [deg]
+    lateralMotor              : [-10, 180]  # [deg]
     transversalMotor          : [-60, 180]  # [deg]
     maxTransversalMotorDiff   : 10           # [deg]
     maxTransversalMotorSum    : 220         # [deg]
 
   learn:
     # rewards    
-    rewardScale               : 0.005
+    rewardScale               : 1 #0.005
     rOrientRewardScale        : 1
     rBaseAccRewardScale       : 0.0 #0.01
     rActionClipRewardScale    : 0 #0.33
     rTorqueClipRewardScale    : 0.0 #0.01 #0.33 
-    rCollisionRewardScale     : 10 # Is multiplied with 1 (= "true") if collision is detected
+    rCollisionRewardScale     : 0 #0.1 # Is multiplied with 1 (= "true") if collision is detected
+    rIsDoneRewardScale        : 150 #150 (Best)
+    rInsideThresholdRewardScale : 500
 
     # temperatures
-    rOrientRewardTemp         : 0.5
+    rOrientRewardTemp         : 0.7 #0.3 #0.5
 
     # episode length in seconds
     episodeLength_s: 3
