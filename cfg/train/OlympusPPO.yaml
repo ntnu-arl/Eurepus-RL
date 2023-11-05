@@ -28,7 +28,7 @@ params: # Docs: https://github.com/Denys88/rl_games#config-parameters
       d2rl: False
 
       initializer: # For the hidden layers
-        name: kaiming_normal # default
+        name: default # kaiming_normal or default
       regularizer:
         name: None
 
@@ -51,7 +51,7 @@ params: # Docs: https://github.com/Denys88/rl_games#config-parameters
     reward_shaper:
       scale_value: 1.0
     normalize_advantage: True
-    gamma: 0.9995
+    gamma: 0.98 #0.9995
     tau: 0.95 # Lambda for GAE
     e_clip: 0.2
     entropy_coef: 0.0
@@ -59,7 +59,7 @@ params: # Docs: https://github.com/Denys88/rl_games#config-parameters
     lr_schedule: adaptive
     kl_threshold: 0.008 # target kl for adaptive lr
     truncate_grads: True
-    grad_norm: 1.
+    grad_norm: 10.
     horizon_length: 60 #24 # Horizon length per each actor. Total number of steps will be num_actors*horizon_length * num_agents (if env is not MA num_agents==1).
     minibatch_size: 49152 # 384, 1024, 10240, 12288, 49152
     mini_epochs: 5

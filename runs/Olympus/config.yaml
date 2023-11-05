@@ -62,17 +62,17 @@ task:
       maxTransversalMotorSum: 220
     learn:
       rewardScale: 1
-      rOrientRewardScale: 100
-      rBaseAccRewardScale: 0.01
-      rActionClipRewardScale: 0.33
+      rOrientRewardScale: 1
+      rBaseAccRewardScale: 0.0
+      rActionClipRewardScale: 0.0
       rTorqueClipRewardScale: 0
-      rCollisionRewardScale: 10
+      rCollisionRewardScale: 150
       rIsDoneRewardScale: 0
       rInsideThresholdRewardScale: 0
       cNumberOfLevels: 1
       cNextLevelThreshold: 5
       angleErrorThreshold: 2
-      episodeLength_s: 0.5
+      episodeLength_s: 5
   sim:
     dt: 0.00208
     use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
@@ -151,7 +151,7 @@ train:
         activation: elu
         d2rl: false
         initializer:
-          name: kaiming_normal
+          name: default
         regularizer:
           name: None
     load_checkpoint: ${if:${...checkpoint},True,False}
@@ -172,7 +172,7 @@ train:
       reward_shaper:
         scale_value: 1.0
       normalize_advantage: true
-      gamma: 0.9995
+      gamma: 0.98
       tau: 0.95
       e_clip: 0.2
       entropy_coef: 0.0
@@ -180,7 +180,7 @@ train:
       lr_schedule: adaptive
       kl_threshold: 0.008
       truncate_grads: true
-      grad_norm: 1.0
+      grad_norm: 10.0
       horizon_length: 60
       minibatch_size: 960
       mini_epochs: 5
@@ -199,7 +199,7 @@ task_name: ${task.name}
 experiment: ''
 RL_task: 3D
 num_envs: ''
-seed: 4508
+seed: 2110
 torch_deterministic: false
 max_iterations: ''
 physics_engine: physx

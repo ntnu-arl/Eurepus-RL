@@ -289,21 +289,21 @@ class OlympusTask(RLTask):
         """
         Apply control signals to the quadropeds.
         """
-        # new_targets = actions
+        new_targets = actions
 
-        # # lineraly interpolate between min and max
-        # self.current_policy_targets = 0.5 * new_targets * (
-        #     self._motor_joint_upper_targets_limits - self._motor_joint_lower_targets_limits
-        # ).view(1, -1) + 0.5 * (self._motor_joint_upper_targets_limits + self._motor_joint_lower_targets_limits).view(
-        #     1, -1
-        # )
+        # lineraly interpolate between min and max
+        self.current_policy_targets = 0.5 * new_targets * (
+            self._motor_joint_upper_targets_limits - self._motor_joint_lower_targets_limits
+        ).view(1, -1) + 0.5 * (self._motor_joint_upper_targets_limits + self._motor_joint_lower_targets_limits).view(
+            1, -1
+        )
         # self.current_policy_targets += actions * 1000 * torch.pi / 180 * self.dt * self._controlFrequencyInv
 
         # clamp targets to avoid self collisions
         self.current_clamped_targets = self._clamp_joint_angels(self.current_policy_targets)
 
         # Set targets
-        # self._olympusses.set_joint_position_targets(self.current_clamped_targets, joint_indices=self.actuated_idx)
+        self._olympusses.set_joint_position_targets(self.current_clamped_targets, joint_indices=self.actuated_idx)
 
     def reset_idx(self, env_ids):
         num_resets = len(env_ids)
