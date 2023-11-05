@@ -53,38 +53,26 @@ task:
       BackKnee_BL: 0.0
     jointLimits:
       lateralMotor:
-      - -10
-      - 180
+      - -180
+      - 20
       transversalMotor:
       - -60
       - 180
-      maxTransversalMotorDiff: 10
+      maxTransversalMotorDiff: -10
       maxTransversalMotorSum: 220
     learn:
       rewardScale: 1
-      rOrientRewardScale: 1
-      rOrientImprovedRewardScale: 0.0
-      rBaseAccRewardScale: 0.0
-      rActionClipRewardScale: 0.0
-      rTorqueClipRewardScale: 0.0
-      rCollisionRewardScale: 0.0
-      rIsDoneRewardScale: 300
-      rInsideThresholdRewardScale: 500
-      cLowerAngleBound:
-      - 0
-      - 0.33
-      - 0.66
-      cUpperAngleBound:
-      - 0.33
-      - 0.66
-      - 1
-      cOrientRewardTemp:
-      - 0.25
-      - 0.5
-      - 0.7
+      rOrientRewardScale: 100
+      rBaseAccRewardScale: 0.01
+      rActionClipRewardScale: 0.33
+      rTorqueClipRewardScale: 0
+      rCollisionRewardScale: 10
+      rIsDoneRewardScale: 0
+      rInsideThresholdRewardScale: 0
+      cNumberOfLevels: 1
       cNextLevelThreshold: 5
       angleErrorThreshold: 2
-      episodeLength_s: 5
+      episodeLength_s: 0.5
   sim:
     dt: 0.00208
     use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
@@ -153,17 +141,17 @@ train:
             name: default
           sigma_init:
             name: const_initializer
-            val: 0.0
+            val: 0
           fixed_sigma: true
       mlp:
         units:
+        - 512
         - 256
         - 128
-        - 64
         activation: elu
         d2rl: false
         initializer:
-          name: default
+          name: kaiming_normal
         regularizer:
           name: None
     load_checkpoint: ${if:${...checkpoint},True,False}
@@ -192,16 +180,18 @@ train:
       lr_schedule: adaptive
       kl_threshold: 0.008
       truncate_grads: true
-      grad_norm: 10.0
+      grad_norm: 1.0
       horizon_length: 60
       minibatch_size: 960
       mini_epochs: 5
       critic_coef: 2
-      clip_value: true
+      clip_value: false
+      clip_actions: true
       seq_len: 4
-      bounds_loss_coef: 0
-      max_epochs: ${resolve_default:2000,${....max_iterations}}
-      save_best_after: 1
+      bound_loss_type: bound
+      bounds_loss_coef: 0.01
+      max_epochs: ${resolve_default:3000,${....max_iterations}}
+      save_best_after: 50
       score_to_win: 20000
       save_frequency: 50
       print_stats: true
@@ -209,7 +199,7 @@ task_name: ${task.name}
 experiment: ''
 RL_task: 3D
 num_envs: ''
-seed: 3572
+seed: 4508
 torch_deterministic: false
 max_iterations: ''
 physics_engine: physx
