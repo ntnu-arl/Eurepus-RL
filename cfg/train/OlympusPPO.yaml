@@ -23,7 +23,7 @@ params: # Docs: https://github.com/Denys88/rl_games#config-parameters
         fixed_sigma: True
 
     mlp:
-      units: [512, 256, 128]
+      units: [128, 64, 64]
       activation: elu
       d2rl: False
 
@@ -51,7 +51,7 @@ params: # Docs: https://github.com/Denys88/rl_games#config-parameters
     reward_shaper:
       scale_value: 1.0
     normalize_advantage: True
-    gamma: 0.98 #0.9995
+    gamma: 0.99 #0.9995
     tau: 0.95 # Lambda for GAE
     e_clip: 0.2
     entropy_coef: 0.0
@@ -62,7 +62,7 @@ params: # Docs: https://github.com/Denys88/rl_games#config-parameters
     grad_norm: 10.
     horizon_length: 60 #24 # Horizon length per each actor. Total number of steps will be num_actors*horizon_length * num_agents (if env is not MA num_agents==1).
     minibatch_size: 49152 # 384, 1024, 10240, 12288, 49152
-    mini_epochs: 5
+    mini_epochs: 15 #5
     critic_coef: 2
     clip_value: False 
     clip_actions: True

@@ -308,41 +308,49 @@ class OlympusTask(RLTask):
     def reset_idx(self, env_ids):
         num_resets = len(env_ids)
         # Set initial joint states
-        front_transversal = torch.rand((num_resets * 4,), device=self._device)
-        # front_transversal = linear_rescale(front_transversal, *self.transversal_motor_limits)
-        front_transversal = linear_rescale(
-            front_transversal,
-            torch.tensor(0.0, device=self._device),
-            torch.tensor(100.0, device=self._device).deg2rad(),
-        )
-        back_transversal = torch.rand((num_resets * 4,), device=self._device)
-        # back_transversal_min = torch.max(
-        #     self._max_transversal_motor_diff - front_transversal, self.transversal_motor_limits[0]
-        # )
-        # back_transversal_max = torch.min(
-        #     self._max_transversal_motor_sum - front_transversal, self.transversal_motor_limits[1]
-        # )
-        # back_transversal = linear_rescale(back_transversal, back_transversal_min, back_transversal_max)
-        back_transversal = linear_rescale(
-            back_transversal, torch.tensor(0.0, device=self._device), torch.tensor(100.0, device=self._device).deg2rad()
-        )
+        # For test:
+        if self._cfg["test"]:
+            dof_pos = self.default_articulated_joints_pos[env_ids]
+        # For train: randomize joint states
+        else:
+            front_transversal = torch.rand((num_resets * 4,), device=self._device)
+            # front_transversal = linear_rescale(front_transversal, *self.transversal_motor_limits)
+            front_transversal = linear_rescale(
+                front_transversal,
+                torch.tensor(5.0, device=self._device).deg2rad(),
+                torch.tensor(100.0, device=self._device).deg2rad(),
+            )
+            back_transversal = torch.rand((num_resets * 4,), device=self._device)
+            # back_transversal_min = torch.max(
+            #     self._max_transversal_motor_diff - front_transversal, self.transversal_motor_limits[0]
+            # )
+            # back_transversal_max = torch.min(
+            #     self._max_transversal_motor_sum - front_transversal, self.transversal_motor_limits[1]
+            # )
+            # back_transversal = linear_rescale(back_transversal, back_transversal_min, back_transversal_max)
+            back_transversal = linear_rescale(
+                back_transversal,
+                torch.tensor(5.0, device=self._device).deg2rad(),
+                torch.tensor(100.0, device=self._device).deg2rad(),
+            )
 
-        knee_outer, knee_inner, _ = self._forward_kin._calculate_knee_angles(front_transversal, back_transversal)
+            knee_outer, knee_inner, _ = self._forward_kin._calculate_knee_angles(front_transversal, back_transversal)
 
-        lateral = torch.rand((num_resets * 4,), device=self._device)
-        # lateral = linear_rescale(lateral, *self.lateral_motor_limits)
-        lateral = linear_rescale(
-            lateral,
-            torch.tensor(-100.0, device=self._device).deg2rad(),
-            torch.tensor(0.0, device=self._device).deg2rad(),
-        )
+            lateral = torch.rand((num_resets * 4,), device=self._device)
+            # lateral = linear_rescale(lateral, *self.lateral_motor_limits)
+            lateral = linear_rescale(
+                lateral,
+                torch.tensor(-100.0, device=self._device).deg2rad(),
+                torch.tensor(10.0, device=self._device).deg2rad(),
+            )
 
-        dof_pos = self.default_articulated_joints_pos[env_ids]
-        dof_pos[:, self.actuated_lateral_idx] = lateral.reshape((num_resets, 4))
-        dof_pos[:, self.front_transversal_indicies] = front_transversal.reshape((num_resets, 4))
-        dof_pos[:, self.back_transversal_indicies] = back_transversal.reshape((num_resets, 4))
-        dof_pos[:, self._knee_outer_indicies] = knee_outer.reshape((num_resets, 4))
-        dof_pos[:, self._knee_inner_indicies] = knee_inner.reshape((num_resets, 4))
+            dof_pos = self.default_articulated_joints_pos[env_ids]
+            dof_pos[:, self.actuated_lateral_idx] = lateral.reshape((num_resets, 4))
+            dof_pos[:, self.front_transversal_indicies] = front_transversal.reshape((num_resets, 4))
+            dof_pos[:, self.back_transversal_indicies] = back_transversal.reshape((num_resets, 4))
+            dof_pos[:, self._knee_outer_indicies] = knee_outer.reshape((num_resets, 4))
+            dof_pos[:, self._knee_inner_indicies] = knee_inner.reshape((num_resets, 4))
+
         dof_vel = torch.zeros((num_resets, self._olympusses.num_dof), device=self._device)
 
         # Set initial motor targets
@@ -355,9 +363,9 @@ class OlympusTask(RLTask):
         root_vel = torch.zeros((num_resets, 6), device=self._device)
 
         # Get random roll pitch and yaw
-        roll = self._roll_sampler.sample((num_resets,))
+        roll = self._roll_sampler.sample((num_resets,)) 
         # roll[self._current_curriculum_levels[env_ids] == 0] = 0
-        pitch = self._pitch_sampler.sample((num_resets,))
+        pitch = self._pitch_sampler.sample((num_resets,)) 
         yaw = self._yaw_sampler.sample((num_resets,))
         # yaw[self._current_curriculum_levels[env_ids] == 0] = 0
 
@@ -451,8 +459,8 @@ class OlympusTask(RLTask):
         self.olympus_motor_joint_upper_limits[:, self.back_transversal_indicies] = self.transversal_motor_limits[1]
         self.olympus_motor_joint_upper_limits[:, self.lateral_indicies] = self.lateral_motor_limits[1]
 
-        self._motor_joint_upper_targets_limits = self.olympus_motor_joint_upper_limits.clone() + 15 * torch.pi / 180
-        self._motor_joint_lower_targets_limits = self.olympus_motor_joint_lower_limits.clone() - 15 * torch.pi / 180
+        self._motor_joint_upper_targets_limits = self.olympus_motor_joint_upper_limits.clone()  # + 15 * torch.pi / 180
+        self._motor_joint_lower_targets_limits = self.olympus_motor_joint_lower_limits.clone()  # - 15 * torch.pi / 180
 
         self.initial_root_pos, self.initial_root_rot = self._olympusses.get_world_poses()
         self.current_policy_targets = self.default_actuated_joints_pos.clone()
@@ -535,7 +543,7 @@ class OlympusTask(RLTask):
 
         # Calculate rew_{is_done}
         rew_is_done = torch.zeros_like(self._time_out, dtype=torch.float)
-        rew_is_done[self._time_out] = -orient_error[self._time_out] * self.rew_scales["r_is_done"]
+        rew_is_done[self._time_out] = (torch.pi / 2 - orient_error[self._time_out]) * self.rew_scales["r_is_done"]
 
         # Calculate total reward
         total_reward = (
@@ -581,7 +589,7 @@ class OlympusTask(RLTask):
         self._collision_buff = self._collision_buff.logical_or(motor_joint_violations)
 
         # Combine resets
-        reset = self._time_out.logical_or(motor_joint_violations).logical_or(self._collision_buff)
+        reset = self._time_out.logical_or(self._collision_buff)
 
         # Calculate if curriculum should be updated:
         if not self._cfg["test"] and self._time_out.any():

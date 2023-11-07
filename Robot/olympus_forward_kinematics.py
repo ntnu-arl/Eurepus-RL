@@ -52,7 +52,7 @@ class OlympusForwardKinematics(torch.jit.ScriptModule):
         paw_attachment_mhf_0 = torch.zeros_like(front_knee_mhf)
         paw_attachment_mhf_1 = torch.zeros_like(back_knee_mhf)
         # for speed we only do 5 iterations with a stepsize of 1, testing shows that this is sufficient
-        for _ in range(20):
+        for _ in range(10):
             rot_fkf = self._rotation_matrix_y(-q_front + self._fkf_init + q_fk)
             rot_bkf = self._rotation_matrix_y(q_back + self._bkf_init - q_bk)
             paw_attachment_mhf_0 = front_knee_mhf + self._transform_point(rot_fkf, self._paw_attachment_fkf)

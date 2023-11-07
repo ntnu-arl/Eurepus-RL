@@ -63,16 +63,16 @@ task:
     learn:
       rewardScale: 1
       rOrientRewardScale: 1
-      rBaseAccRewardScale: 0.0
-      rActionClipRewardScale: 0.0
-      rTorqueClipRewardScale: 0
-      rCollisionRewardScale: 150
-      rIsDoneRewardScale: 0
-      rInsideThresholdRewardScale: 0
+      rBaseAccRewardScale: 0.0001
+      rActionClipRewardScale: 0.01
+      rTorqueClipRewardScale: 1.0e-06
+      rCollisionRewardScale: 0
+      rIsDoneRewardScale: 150
+      rInsideThresholdRewardScale: 1
       cNumberOfLevels: 1
       cNextLevelThreshold: 5
       angleErrorThreshold: 2
-      episodeLength_s: 5
+      episodeLength_s: 3
   sim:
     dt: 0.00208
     use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
@@ -145,9 +145,9 @@ train:
           fixed_sigma: true
       mlp:
         units:
-        - 512
-        - 256
         - 128
+        - 64
+        - 64
         activation: elu
         d2rl: false
         initializer:
@@ -172,7 +172,7 @@ train:
       reward_shaper:
         scale_value: 1.0
       normalize_advantage: true
-      gamma: 0.98
+      gamma: 0.99
       tau: 0.95
       e_clip: 0.2
       entropy_coef: 0.0
@@ -183,7 +183,7 @@ train:
       grad_norm: 10.0
       horizon_length: 60
       minibatch_size: 960
-      mini_epochs: 5
+      mini_epochs: 15
       critic_coef: 2
       clip_value: false
       clip_actions: true
@@ -199,7 +199,7 @@ task_name: ${task.name}
 experiment: ''
 RL_task: 3D
 num_envs: ''
-seed: 2110
+seed: 9643
 torch_deterministic: false
 max_iterations: ''
 physics_engine: physx
