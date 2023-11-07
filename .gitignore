@@ -12,7 +12,7 @@ env/
 *.DS_Store
 */runs/*
 runs
-utils
+plots
 
 
 # VS Code specific
