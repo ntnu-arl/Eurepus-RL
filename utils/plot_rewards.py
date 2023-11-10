@@ -22,8 +22,8 @@ tags_to_plot = [
     'rewards/iter'
     ]
 
-try:
-    for tag in tags_to_plot:
+for tag in tags_to_plot:
+    try:
         # Create a new plot for each tag
         plt.figure(figsize=(10, 5))
         
@@ -42,5 +42,5 @@ try:
         # Save the plot as a PDF. NB: DO NOT USE EPS
         plt.savefig(f'../plots/{tag.replace("/", "_")}_plot.pdf', format='pdf')
         
-except KeyError as e:
-    print("KeyError:", e)
+    except KeyError as e:
+        print(f"KeyError: {e} - Skipping tag: {tag}")
