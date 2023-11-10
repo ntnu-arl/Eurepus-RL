@@ -68,7 +68,7 @@ params: # Docs: https://github.com/Denys88/rl_games#config-parameters
     seq_len: 4 # only for rnn
     bounds_loss_coef: 0 # 0.001
 
-    max_epochs: ${resolve_default:3000,${....max_iterations}}
+    max_epochs: ${resolve_default:5000,${....max_iterations}}
     save_best_after: 50
     score_to_win: 20000
     save_frequency: 50
