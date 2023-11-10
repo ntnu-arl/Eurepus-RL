@@ -13,7 +13,7 @@ env/
 */runs/*
 runs
 plots
-
+Event_Files
 
 # VS Code specific
 .vscode/
