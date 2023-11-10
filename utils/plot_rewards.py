@@ -19,7 +19,7 @@ tags_to_plot = [
     'losses/c_loss',
     'losses/entropy',
     'episode_lengths/iter',
-    'rewards/step'
+    'rewards/iter'
     ]
 
 try:
