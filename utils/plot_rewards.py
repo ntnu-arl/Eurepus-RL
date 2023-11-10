@@ -13,6 +13,7 @@ tags_to_plot = [
     'detailed_rewards/is_within_threshold/iter', 
     'detailed_rewards/torque_clip/iter',
     'detailed_rewards/action_clip/iter',
+    'detailed_rewards/collision/iter',
     'losses/a_loss',
     'losses/bounds_loss',
     'losses/c_loss',
