@@ -549,7 +549,7 @@ class OlympusTask(RLTask):
 
         # Calculate total reward
         total_reward = (
-            rew_orient + self.rew_is_done + rew_innside_threshold # + rew_collision + rew_base_acc + rew_action_clip + rew_torque_clip 
+            rew_orient + self.rew_is_done + rew_innside_threshold + rew_torque_clip # + rew_collision + rew_base_acc + rew_action_clip + rew_torque_clip 
         ) * self.rew_scales["total"]
 
         total_reward[self.any_nan_obs_mask] = 0
