@@ -69,6 +69,7 @@ task:
       rCollisionRewardScale: 0
       rIsDoneRewardScale: 150
       rInsideThresholdRewardScale: 1
+      rOrientIntegralRewardScale: 0.001
       cNumberOfLevels: 1
       cNextLevelThreshold: 5
       angleErrorThreshold: 2
@@ -199,7 +200,7 @@ task_name: ${task.name}
 experiment: ''
 RL_task: 3D
 num_envs: ''
-seed: 9643
+seed: 8381
 torch_deterministic: false
 max_iterations: ''
 physics_engine: physx

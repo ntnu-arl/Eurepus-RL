@@ -64,6 +64,7 @@ env:
     rCollisionRewardScale     : 0 # Is multiplied with 1 (= "true") if collision is detected
     rIsDoneRewardScale        : 150
     rInsideThresholdRewardScale: 1 # Is multiplied with 1 (= "true") if innside threshold when reset
+    rOrientIntegralRewardScale: 0.001 #0.01 # 0.00001
 
     # Curriculum 
     cNumberOfLevels           : 1

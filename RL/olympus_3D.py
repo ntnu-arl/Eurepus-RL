@@ -65,6 +65,7 @@ class OlympusTask(RLTask):
         self.rew_scales["r_inside_threshold"] = self._task_cfg["env"]["learn"]["rInsideThresholdRewardScale"]
         self.rew_scales["r_is_done"] = self._task_cfg["env"]["learn"]["rIsDoneRewardScale"]
         self.rew_scales["total"] = self._task_cfg["env"]["learn"]["rewardScale"]
+        self.rew_scales["r_orient_integral"] = self._task_cfg["env"]["learn"]["rOrientIntegralRewardScale"]
 
         # base init state
         pos = self._task_cfg["env"]["baseInitState"]["pos"]
@@ -131,6 +132,9 @@ class OlympusTask(RLTask):
         self._finished_orient_error_threshold = self._task_cfg["env"]["learn"]["angleErrorThreshold"] * torch.pi / 180
         self._inside_threshold = torch.zeros((self.num_envs,), device=self._device)
         self.last_orient_error = torch.pi * torch.ones((self.num_envs,), device=self._device)
+
+        # Define reward intergral
+        self._orient_error_integral = torch.zeros((self.num_envs,), device=self._device)
 
         # Initialize logger
         self._obs_count = 0
@@ -363,9 +367,9 @@ class OlympusTask(RLTask):
         root_vel = torch.zeros((num_resets, 6), device=self._device)
 
         # Get random roll pitch and yaw
-        roll = self._roll_sampler.sample((num_resets,)) 
+        roll = self._roll_sampler.sample((num_resets,))
         # roll[self._current_curriculum_levels[env_ids] == 0] = 0
-        pitch = self._pitch_sampler.sample((num_resets,)) 
+        pitch = self._pitch_sampler.sample((num_resets,))
         yaw = self._yaw_sampler.sample((num_resets,))
         # yaw[self._current_curriculum_levels[env_ids] == 0] = 0
 
@@ -382,6 +386,8 @@ class OlympusTask(RLTask):
 
         self._olympusses.set_joint_positions(dof_pos, indices)
         self._olympusses.set_joint_velocities(dof_vel, indices)
+
+        self._orient_error_integral[env_ids] = 0
 
         # Bookkeeping
         self.reset_buf[env_ids] = 0
@@ -509,6 +515,9 @@ class OlympusTask(RLTask):
         # rew_orient = -orient_error * self.rew_scales["r_orient"]
         # rew_orient = (torch.pi - orient_error) / torch.pi * self.rew_scales["r_orient"]
 
+        self._orient_error_integral += orient_error * self.dt * self._controlFrequencyInv
+        rew_integral = -self._orient_error_integral**2 * self.rew_scales["r_orient_integral"]
+
         # Calculate rew_orient_diff
         rew_orient_diff = (self.last_orient_error - orient_error) / self.dt * 0
 
@@ -548,6 +557,7 @@ class OlympusTask(RLTask):
         # Calculate total reward
         total_reward = (
             rew_orient
+            + rew_integral
             + rew_base_acc
             + rew_action_clip
             + rew_torque_clip
@@ -563,6 +573,7 @@ class OlympusTask(RLTask):
         self.extras["detailed_rewards/action_clip"] = rew_action_clip.sum()
         self.extras["detailed_rewards/torque_clip"] = rew_torque_clip.sum()
         self.extras["detailed_rewards/orient"] = rew_orient.sum()
+        self.extras["detailed_rewards/orient_integral"] = rew_integral.sum()
         self.extras["detailed_rewards/orient_diff"] = rew_orient_diff.sum()
         self.extras["detailed_rewards/inside_threshold"] = rew_innside_threshold.sum()
         self.extras["detailed_rewards/is_done"] = rew_is_done.sum()
