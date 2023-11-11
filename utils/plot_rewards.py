@@ -11,7 +11,7 @@ plt.rcParams.update({
 })
 
 # Load TensorBoard event file
-log_path = '../Event_Files/2D_sym_colls'
+log_path = '../runs/Olympus/summaries'
 event_acc = event_accumulator.EventAccumulator(log_path)
 event_acc.Reload()
 
@@ -21,9 +21,12 @@ data_to_plot = {
     'detailed_rewards/orient/iter' : ['Orientation reward','Batch reward sum'], 
     'detailed_rewards/is_done/iter' : ['Terminal reward','Batch reward sum'], 
     'detailed_rewards/is_within_threshold/iter' : ['Within threshold reward','Batch reward sum'], 
+    'detailed_rewards/inside_threshold/iter' : ['Within threshold reward','Batch reward sum'], 
     'detailed_rewards/torque_clip/iter' : ['Torque clip reward','Batch reward sum'],
     'detailed_rewards/action_clip/iter' : ['Action clip reward','Batch reward sum'],
     'detailed_rewards/collision/iter' : ['Collision reward','Batch reward sum'],
+    'detailed_rewards/orient_integral/iter' : ['Orientation integral reward','Batch reward sum'],
+
     'losses/a_loss' : ['Actor loss','loss'],
     'losses/bounds_loss' : ['Bounds loss','loss'],
     'losses/c_loss' : ['Critic Loss','loss'],
@@ -35,10 +38,12 @@ data_to_plot = {
 tags_to_plot = [
     'detailed_rewards/orient/iter', 
     'detailed_rewards/is_done/iter', 
-    'detailed_rewards/is_within_threshold/iter', 
+    'detailed_rewards/is_within_threshold/iter',
+    'detailed_rewards/inside_threshold/iter', 
     'detailed_rewards/torque_clip/iter',
     'detailed_rewards/action_clip/iter',
     'detailed_rewards/collision/iter',
+    'detailed_rewards/orient_integral/iter',
     'losses/a_loss',
     'losses/bounds_loss',
     'losses/c_loss',
@@ -64,7 +69,7 @@ for tag in data_to_plot.keys():
         # plt.xlabel('Epochs', fontsize=10)
         plt.ylabel(data_to_plot[tag][1], fontsize=10)
 
-        # Save the plot as a PDF. NB: DO NOT USE EPS
+        # Save the plot as a PDF and PGF. NB: DO NOT USE EPS
         plt.savefig(f'../plots/pgf/{tag.replace("/", "_")}_plot.pgf', format='pgf')
         plt.savefig(f'../plots/pdf/{tag.replace("/", "_")}_plot.pdf', format='pdf')
 
