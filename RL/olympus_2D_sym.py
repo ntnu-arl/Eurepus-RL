@@ -328,7 +328,7 @@ class OlympusTask(RLTask):
 
         rand_rot = quat_from_euler_xyz(
             roll =torch.zeros_like(roll) - torch.pi/2,
-            pitch=self.pitch_sampeler.rsample((num_resets,)),
+            pitch= 0.3 * self.pitch_sampeler.rsample((num_resets,)),
             yaw  =torch.zeros_like(yaw)
         )
 
@@ -477,6 +477,13 @@ class OlympusTask(RLTask):
             + rew_torque_clip
         ) * self.rew_scales["total"]
 
+         # Add rewards to tensorboard log
+        self.extras["detailed_rewards/base_acc"] = rew_base_acc.sum()
+        self.extras["detailed_rewards/action_clip"] = rew_action_clip.sum()
+        self.extras["detailed_rewards/torque_clip"] = rew_torque_clip.sum()
+        self.extras["detailed_rewards/orient"] = rew_orient.sum()
+        self.extras["detailed_rewards/total_reword"] = total_reward.sum()
+
         # Print the average of all rewards
         # print(f"rew_orient: {rew_orient.mean():.2f}, rew_base_acc: {rew_base_acc.mean():.2f}, rew_action_clip: {rew_action_clip.mean():.2f}, rew_torque_clip: {rew_torque_clip.mean():.2f}, total_reward: {total_reward.mean():.2f}")
 
@@ -513,9 +520,10 @@ class OlympusTask(RLTask):
         back_pos[clamp_mask_wide]  -= (motor_joint_sum[clamp_mask_wide] - self._max_transversal_motor_sum)/2
 
 
-        joint_targets[:, self.front_transversal_indicies] = front_pos
-        joint_targets[:, self.back_transversal_indicies] = back_pos
-        return joint_targets
+        clamped_targets = torch.zeros_like(joint_targets)
+        clamped_targets[:, self.front_transversal_indicies] = front_pos
+        clamped_targets[:, self.back_transversal_indicies] = back_pos
+        return clamped_targets
 
         
 
