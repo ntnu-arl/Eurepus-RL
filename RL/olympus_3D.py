@@ -67,7 +67,10 @@ class OlympusTask(RLTask):
         self.rew_scales["total"] = self._task_cfg["env"]["learn"]["rewardScale"]
         self.rew_scales["r_orient_integral"] = self._task_cfg["env"]["learn"]["rOrientIntegralRewardScale"]
         self.rew_scales["r_joint_acc"] = self._task_cfg["env"]["learn"]["rJointAccRewardScale"]
-        self.rew_scales["r_joint_vel_clip"] = self._task_cfg["env"]["learn"]["rJointVelClipRewardScale"]
+        self.rew_scales["r_velocity"] = self._task_cfg["env"]["learn"]["rVelocity"]
+        self.rew_scales["r_change_dir"] = self._task_cfg["env"]["learn"]["rChangeDir"]
+        self.rew_scales["r_regularize"] = self._task_cfg["env"]["learn"]["rRegularize"]
+
 
         # base init state
         pos = self._task_cfg["env"]["baseInitState"]["pos"]
@@ -102,6 +105,7 @@ class OlympusTask(RLTask):
         self._num_actions = 24 #12
         self._num_articulated_joints = 20
 
+
         self._max_transversal_motor_diff = (
             self._task_cfg["env"]["jointLimits"]["maxTransversalMotorDiff"] * torch.pi / 180
         )
@@ -110,6 +114,9 @@ class OlympusTask(RLTask):
         )
 
         RLTask.__init__(self, name, env)
+
+        self.joint_vel_old = torch.zeros([self._num_envs, self._num_actions], device=self._device)
+        self.joint_targets_old = torch.zeros([self._num_envs, self._num_actions], device=self._device)
 
         # Random initial euler angles after reset
         self._roll_sampler = Uniform(torch.tensor(-torch.pi, device=self._device), torch.pi)
@@ -564,6 +571,7 @@ class OlympusTask(RLTask):
             * self.rew_scales["r_action_clip"]
         )
 
+
         # Calculate rew_{torque_clip}
         motor_joint_pos = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
         motor_joint_vel = self._olympusses.get_joint_velocities(clone=False, joint_indices=self.actuated_idx)
@@ -573,19 +581,27 @@ class OlympusTask(RLTask):
             -torch.norm(commanded_torques - applied_torques, dim=1) ** 2 * self.rew_scales["r_torque_clip"]
         )
 
-        # Calculate rew_{joint_vel_clip}
-        rew_joint_vel_clip = (
-            -torch.norm(torch.max(torch.abs(motor_joint_vel) - self._max_joint_vel, torch.tensor(0.0)), dim=1) ** 2
-            * self.rew_scales["r_joint_vel_clip"]
-        )
-
-
         # calculate rew_{joint_acc}
         joint_acc = (motor_joint_vel - self.last_motor_joint_vel) / (self.dt * self._controlFrequencyInv)
         rew_joint_acc = -torch.norm(joint_acc, dim=1) ** 2 * self.rew_scales["r_joint_acc"]
 
+        # Calculate rew_{velocity}
+        rew_velocity = (
+            -torch.norm(motor_joint_vel, dim = -1) **2 * self.rew_scales["r_velocity"] 
+        )
+
+        # Calculate rew_{change_dir}
+        sign = motor_joint_vel*self.joint_vel_old
+        changed_dir_mask = sign < 0
+        rew_change_dir = - changed_dir_mask.float().sum(dim=-1) * self.rew_scales["r_change_dir"] * rew_orient *1.5
+        self.joint_vel_old = motor_joint_vel
+
+        # Calculate rew_{regularize}
+        rew_regularize = -torch.norm(applied_torques-self.joint_targets_old, dim=-1) * self.rew_scales["r_regularize"] * rew_orient * 1.5
+        self.joint_targets_old = applied_torques
+
         # Calculate rew_{collision}
-        rew_collision = -self._collision_buff.clone().float() * self.rew_scales["r_collision"]
+        rew_collision = -self._collision_buff.clone().float() * self.rew_scales["r_collision"] 
 
         # Calculate inside threshold reward
         rew_innside_threshold = self._inside_threshold.clone().float() * self.rew_scales["r_inside_threshold"]
@@ -605,8 +621,10 @@ class OlympusTask(RLTask):
             + rew_innside_threshold
             + rew_is_done
             + rew_orient_diff
+            + rew_velocity
+            + rew_change_dir
+            + rew_regularize
             + rew_joint_acc
-            + rew_joint_vel_clip
         ) * self.rew_scales["total"]
 
         # Add rewards to tensorboard log
@@ -614,13 +632,15 @@ class OlympusTask(RLTask):
         self.extras["detailed_rewards/base_acc"] = rew_base_acc.sum()
         self.extras["detailed_rewards/action_clip"] = rew_action_clip.sum()
         self.extras["detailed_rewards/joint_acc"] = rew_joint_acc.sum()
-        self.extras["detailed_rewards/joint_vel_clip"] = rew_joint_vel_clip.sum()
         self.extras["detailed_rewards/torque_clip"] = rew_torque_clip.sum()
         self.extras["detailed_rewards/orient"] = rew_orient.sum()
         self.extras["detailed_rewards/orient_integral"] = rew_integral.sum()
         self.extras["detailed_rewards/orient_diff"] = rew_orient_diff.sum()
         self.extras["detailed_rewards/inside_threshold"] = rew_innside_threshold.sum()
         self.extras["detailed_rewards/is_done"] = rew_is_done.sum()
+        self.extras["detailed_rewards/velocity"] = rew_velocity.sum()
+        self.extras["detailed_rewards/regularize"] = rew_regularize.sum()
+        self.extras["detailed_rewards/change_dir"] = rew_change_dir.sum()
         self.extras["detailed_rewards/total_reward"] = total_reward.sum()
 
         # Save last values
