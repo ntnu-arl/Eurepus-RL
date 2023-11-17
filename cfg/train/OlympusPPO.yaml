@@ -25,6 +25,7 @@ params: # Docs: https://github.com/Denys88/rl_games#config-parameters
     mlp:
       units: [128, 64, 64]
       activation: elu
+
       d2rl: False
 
       initializer: # For the hidden layers
@@ -63,14 +64,15 @@ params: # Docs: https://github.com/Denys88/rl_games#config-parameters
     horizon_length: 60 #24 # Horizon length per each actor. Total number of steps will be num_actors*horizon_length * num_agents (if env is not MA num_agents==1).
     minibatch_size: 49152 # 384, 1024, 10240, 12288, 49152
     mini_epochs: 15 #5
+
     critic_coef: 2
     clip_value: False 
     clip_actions: True
     seq_len: 4 # only for rnn
     bound_loss_type: bound # regularisation or bound
     bounds_loss_coef: 0.01
-
     max_epochs: ${resolve_default:3000,${....max_iterations}}
+
     save_best_after: 50
     score_to_win: 20000
     save_frequency: 50

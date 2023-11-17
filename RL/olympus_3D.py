@@ -62,8 +62,8 @@ class OlympusTask(RLTask):
         self.rew_scales["r_action_clip"] = self._task_cfg["env"]["learn"]["rActionClipRewardScale"]
         self.rew_scales["r_torque_clip"] = self._task_cfg["env"]["learn"]["rTorqueClipRewardScale"]
         self.rew_scales["r_collision"] = self._task_cfg["env"]["learn"]["rCollisionRewardScale"]
-        self.rew_scales["r_inside_threshold"] = self._task_cfg["env"]["learn"]["rInsideThresholdRewardScale"]
         self.rew_scales["r_is_done"] = self._task_cfg["env"]["learn"]["rIsDoneRewardScale"]
+        self.rew_scales["r_inside_threshold"] = self._task_cfg["env"]["learn"]["rInsideThresholdRewardScale"]
         self.rew_scales["total"] = self._task_cfg["env"]["learn"]["rewardScale"]
         self.rew_scales["r_orient_integral"] = self._task_cfg["env"]["learn"]["rOrientIntegralRewardScale"]
         self.rew_scales["r_joint_acc"] = self._task_cfg["env"]["learn"]["rJointAccRewardScale"]
@@ -168,6 +168,11 @@ class OlympusTask(RLTask):
         ], device=self._device)
         self._filter_order = len(self._filter_coeffs)
         self._last_n_actions = torch.zeros((self.num_envs, self._num_actions, self._filter_order), device=self._device)
+
+
+        # Define orientation error to be accepted as completed
+        self._finished_orient_error_threshold = 2 * torch.pi / 180
+        self._inside_threshold = torch.zeros((self.num_envs,), device=self._device)
 
         return
 
@@ -283,6 +288,23 @@ class OlympusTask(RLTask):
             dim=-1,
         )
 
+        nan_obs = torch.cat(
+            (
+                motor_joint_pos,
+                motor_joint_vel,
+                base_rotation,
+                root_velocities,
+            ),
+            dim=-1,
+        )
+
+        nan_mask = torch.isnan(obs)
+        obs[nan_mask] = 0
+
+        full_nan_mask = torch.isnan(nan_obs)
+        self.any_nan_obs_mask = torch.any(full_nan_mask,dim=-1)
+
+
         self.obs_buf = obs.clone()
 
         observations = {self._olympusses.name: {"obs_buf": self.obs_buf}}
@@ -312,6 +334,28 @@ class OlympusTask(RLTask):
 
         # Apply spring
         # self._olympusses.apply_action(spring_actions)
+    
+    def post_physics_step(self):
+        """ Processes RL required computations for observations, states, rewards, resets, and extras.
+            Also maintains progress buffer for tracking step count per environment.
+
+        Returns:
+            obs_buf(torch.Tensor): Tensor of observation data.
+            rew_buf(torch.Tensor): Tensor of rewards data.
+            reset_buf(torch.Tensor): Tensor of resets/dones data.
+            extras(dict): Dictionary of extras data.
+        """
+
+        self.progress_buf[:] += 1
+
+        if self._env._world.is_playing():
+            self.get_observations()
+            self.get_states()
+            self.is_done()
+            self.calculate_metrics()
+            self.get_extras()
+
+        return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
 
     def apply_control(self, actions) -> None:
         """
@@ -542,8 +586,8 @@ class OlympusTask(RLTask):
         # Read base rotation
         base_position, base_rotation = self._olympusses.get_world_poses(clone=False)
 
+
         # Calculate rew_{orient}
-        # Quat error
         base_target = self.zero_rot
         orient_error = torch.abs(quat_diff_rad(base_rotation, base_target))
         rew_orient = torch.exp(-orient_error / 0.7) * self.rew_scales["r_orient"]
@@ -610,6 +654,19 @@ class OlympusTask(RLTask):
         rew_is_done = torch.zeros_like(self._time_out, dtype=torch.float)
         rew_is_done[self._time_out] = (torch.pi/2 - orient_error[self._time_out]) * self.rew_scales["r_is_done"]
 
+
+        # Calculate rew_{is_done}
+        self.rew_is_done = torch.zeros_like(self.time_out, dtype=torch.float)
+        self.rew_is_done[self.time_out] = (torch.pi/2 -orient_error[self.time_out]) * self.rew_scales["r_is_done"] #torch.pi/2
+
+
+        # Calculate inside threshold reward
+        self._inside_threshold = (
+                torch.abs(quat_diff_rad(base_rotation, self.zero_rot)) < self._finished_orient_error_threshold
+            ).logical_and(self.time_out)
+        rew_innside_threshold = self._inside_threshold.clone().float() * self.rew_scales["r_inside_threshold"]
+
+
         # Calculate total reward
         total_reward = (
             rew_orient
@@ -626,6 +683,8 @@ class OlympusTask(RLTask):
             + rew_regularize
             + rew_joint_acc
         ) * self.rew_scales["total"]
+
+        total_reward[self.any_nan_obs_mask] = 0
 
         # Add rewards to tensorboard log
         self.extras["detailed_rewards/collision"] = rew_collision.sum()
@@ -691,6 +750,7 @@ class OlympusTask(RLTask):
 
         self.extras["curriculum/n_times_level_completed"] = self._n_times_level_completed.sum() / self.num_envs
 
+
         # Reset buf might already be set to 1 if nan values are detected
         self.reset_buf = torch.logical_or(reset, self.reset_buf)
 
@@ -737,7 +797,7 @@ class OlympusTask(RLTask):
         joint_targets[:, self.back_transversal_indicies] = back_pos
         return joint_targets
 
-
 def linear_rescale(x, x_min, x_max):
     """Linearly rescales between min and max, when input is between 0 and 1"""
     return x * (x_max - x_min) + x_min
+

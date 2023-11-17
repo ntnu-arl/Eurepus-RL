@@ -8,6 +8,7 @@ env:
   envSpacing: 4.  # [m]
 
   clipObservations: 1000.0
+
   clipActions: 1000.0
 
   controlFrequencyInv: 4 #old 2
@@ -77,6 +78,9 @@ env:
     
     # Is succesful threshold -> determines when a level is regarded as completed succesfully 
     angleErrorThreshold       : 2 # in degress
+
+    # temperatures
+    rOrientRewardTemp         : 0.7 #0.3 #0.5
 
     # episode length in seconds
     episodeLength_s: 3
