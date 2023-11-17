@@ -88,7 +88,7 @@ def parse_hydra_configs(cfg: DictConfig):
         cfg.train.params.config.minibatch_size = 960
         cfg.enable_livestream = True
     else:
-        cfg.checkpoint = ""  # "runs/Olympus/nn/Olympus.pth"
+        cfg.checkpoint = "" #"runs/Olympus/nn/Olympus.pth"
         cfg.train.params.load_checkpoint = True if cfg.checkpoint else False
         cfg.train.params.load_path = cfg.checkpoint
 

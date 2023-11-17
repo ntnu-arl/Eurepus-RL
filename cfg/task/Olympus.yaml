@@ -57,20 +57,23 @@ env:
   learn:
     # rewards    
     rewardScale               : 1
-    rOrientRewardScale        : 1
-    rBaseAccRewardScale       : 0.0001 #0.01
+    rOrientRewardScale        : 2
+    rBaseAccRewardScale       : 0 #.0001 #0.01
     rActionClipRewardScale    : 0.01 #0.33
     rTorqueClipRewardScale    : 0.000001 #0.01 #0.33 #0.000001
     rCollisionRewardScale     : 0 # Is multiplied with 1 (= "true") if collision is detected
-    rIsDoneRewardScale        : 150
+    rIsDoneRewardScale        : 100 #150
     rInsideThresholdRewardScale: 1 # Is multiplied with 1 (= "true") if innside threshold when reset
-    rOrientIntegralRewardScale: 0.001 #0.01 # 0.00001
+    rOrientIntegralRewardScale: 0 #0.001 #0.01 # 0.00001
+    rVelocity                 : 0.00002
+    rChangeDir                : 0.035 #0.03  
+    rRegularize               : 0.002 #0.001 
 
     # Curriculum 
     cNumberOfLevels           : 1
     cNextLevelThreshold       : 5 # How many times the current level has to be succesfully done in a row before next level is unlocked
     
-    # Do be succesful threshold -> determines when a level is regarded as completed succesfully 
+    # Is succesful threshold -> determines when a level is regarded as completed succesfully 
     angleErrorThreshold       : 2 # in degress
 
     # episode length in seconds
@@ -134,4 +137,3 @@ sim:
     # per-body
     density: -1
     max_depenetration_velocity: 100.0 # 100.0
-
