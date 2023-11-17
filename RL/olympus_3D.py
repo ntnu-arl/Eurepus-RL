@@ -66,6 +66,8 @@ class OlympusTask(RLTask):
         self.rew_scales["r_is_done"] = self._task_cfg["env"]["learn"]["rIsDoneRewardScale"]
         self.rew_scales["total"] = self._task_cfg["env"]["learn"]["rewardScale"]
         self.rew_scales["r_orient_integral"] = self._task_cfg["env"]["learn"]["rOrientIntegralRewardScale"]
+        self.rew_scales["r_joint_acc"] = self._task_cfg["env"]["learn"]["rJointAccRewardScale"]
+        self.rew_scales["r_joint_vel_clip"] = self._task_cfg["env"]["learn"]["rJointVelClipRewardScale"]
 
         # base init state
         pos = self._task_cfg["env"]["baseInitState"]["pos"]
@@ -85,6 +87,7 @@ class OlympusTask(RLTask):
         self.Kp = self._task_cfg["env"]["control"]["stiffness"]
         self.Kd = self._task_cfg["env"]["control"]["damping"]
         self.max_torque = self._task_cfg["env"]["control"]["max_torque"]
+        self._max_joint_vel = self._task_cfg["env"]["jointLimits"]["maxJointVelocity"] * torch.pi / 180
 
         # TODO:
         # Do we need to scale our rewards?
@@ -96,7 +99,7 @@ class OlympusTask(RLTask):
         self._olympus_translation = torch.tensor(self._task_cfg["env"]["baseInitState"]["pos"])
         self._env_spacing = self._task_cfg["env"]["envSpacing"]
         self._num_observations = 31
-        self._num_actions = 12
+        self._num_actions = 24 #12
         self._num_articulated_joints = 20
 
         self._max_transversal_motor_diff = (
@@ -145,6 +148,20 @@ class OlympusTask(RLTask):
             pitch=torch.zeros(self.num_envs, device=self._device),
             yaw=torch.zeros(self.num_envs, device=self._device),
         )
+
+        # 5 order FIR filter
+        
+        self._filter_coeffs = torch.tensor([
+            0.0223781268042475,
+            0.135783019460217,
+            0.341838853735535,
+            0.341838853735535,
+            0.135783019460217,
+            0.0223781268042475
+        ], device=self._device)
+        self._filter_order = len(self._filter_coeffs)
+        self._last_n_actions = torch.zeros((self.num_envs, self._num_actions, self._filter_order), device=self._device)
+
         return
 
     def set_up_scene(self, scene) -> None:
@@ -293,15 +310,25 @@ class OlympusTask(RLTask):
         """
         Apply control signals to the quadropeds.
         """
-        new_targets = actions
+        # Apply filter 
+        # self._last_n_actions[:, :, 1:] = self._last_n_actions[:, :, :-1]
+        # self._last_n_actions[:, :, 0] = actions.clone()
+        # new_targets = torch.matmul(self._last_n_actions, self._filter_coeffs)
+
+        # Dont apply filter
+        new_targets = actions.clone()
+        pos_target = new_targets[:, :12]
+        interpol_coeff = (new_targets[:, 12:] + 1) / 2
 
         # lineraly interpolate between min and max
-        self.current_policy_targets = 0.5 * new_targets * (
+        new_targets = 0.5 * pos_target * (
             self._motor_joint_upper_targets_limits - self._motor_joint_lower_targets_limits
         ).view(1, -1) + 0.5 * (self._motor_joint_upper_targets_limits + self._motor_joint_lower_targets_limits).view(
             1, -1
         )
-        # self.current_policy_targets += actions * 1000 * torch.pi / 180 * self.dt * self._controlFrequencyInv
+
+        self.current_policy_targets = (1 - interpol_coeff) * new_targets + interpol_coeff * self._olympusses.get_joint_positions(clone=True, joint_indices=self.actuated_idx)
+        # self.current_policy_targets += actions * self._max_joint_vel * self.dt * self._controlFrequencyInv
 
         # clamp targets to avoid self collisions
         self.current_clamped_targets = self._clamp_joint_angels(self.current_policy_targets)
@@ -394,6 +421,7 @@ class OlympusTask(RLTask):
         self.progress_buf[env_ids] = 0
         self.last_actions[env_ids] = 0.0
         self.last_motor_joint_vel[env_ids] = 0.0
+        self._last_n_actions[env_ids] = 0.0
 
     def post_reset(self):
         self._forward_kin = OlympusForwardKinematics(self._device)
@@ -479,7 +507,7 @@ class OlympusTask(RLTask):
             requires_grad=False,
         )
         self.last_motor_joint_vel = torch.zeros(
-            (self._num_envs, self._num_articulated_joints),
+            (self._num_envs, self._num_actuated),
             dtype=torch.float,
             device=self._device,
             requires_grad=False,
@@ -512,6 +540,7 @@ class OlympusTask(RLTask):
         base_target = self.zero_rot
         orient_error = torch.abs(quat_diff_rad(base_rotation, base_target))
         rew_orient = torch.exp(-orient_error / 0.7) * self.rew_scales["r_orient"]
+        # rew_orient[self._inside_threshold] = 0
         # rew_orient = -orient_error * self.rew_scales["r_orient"]
         # rew_orient = (torch.pi - orient_error) / torch.pi * self.rew_scales["r_orient"]
 
@@ -544,6 +573,17 @@ class OlympusTask(RLTask):
             -torch.norm(commanded_torques - applied_torques, dim=1) ** 2 * self.rew_scales["r_torque_clip"]
         )
 
+        # Calculate rew_{joint_vel_clip}
+        rew_joint_vel_clip = (
+            -torch.norm(torch.max(torch.abs(motor_joint_vel) - self._max_joint_vel, torch.tensor(0.0)), dim=1) ** 2
+            * self.rew_scales["r_joint_vel_clip"]
+        )
+
+
+        # calculate rew_{joint_acc}
+        joint_acc = (motor_joint_vel - self.last_motor_joint_vel) / (self.dt * self._controlFrequencyInv)
+        rew_joint_acc = -torch.norm(joint_acc, dim=1) ** 2 * self.rew_scales["r_joint_acc"]
+
         # Calculate rew_{collision}
         rew_collision = -self._collision_buff.clone().float() * self.rew_scales["r_collision"]
 
@@ -552,7 +592,7 @@ class OlympusTask(RLTask):
 
         # Calculate rew_{is_done}
         rew_is_done = torch.zeros_like(self._time_out, dtype=torch.float)
-        rew_is_done[self._time_out] = (torch.pi / 2 - orient_error[self._time_out]) * self.rew_scales["r_is_done"]
+        rew_is_done[self._time_out] = (torch.pi/2 - orient_error[self._time_out]) * self.rew_scales["r_is_done"]
 
         # Calculate total reward
         total_reward = (
@@ -565,12 +605,16 @@ class OlympusTask(RLTask):
             + rew_innside_threshold
             + rew_is_done
             + rew_orient_diff
+            + rew_joint_acc
+            + rew_joint_vel_clip
         ) * self.rew_scales["total"]
 
         # Add rewards to tensorboard log
         self.extras["detailed_rewards/collision"] = rew_collision.sum()
         self.extras["detailed_rewards/base_acc"] = rew_base_acc.sum()
         self.extras["detailed_rewards/action_clip"] = rew_action_clip.sum()
+        self.extras["detailed_rewards/joint_acc"] = rew_joint_acc.sum()
+        self.extras["detailed_rewards/joint_vel_clip"] = rew_joint_vel_clip.sum()
         self.extras["detailed_rewards/torque_clip"] = rew_torque_clip.sum()
         self.extras["detailed_rewards/orient"] = rew_orient.sum()
         self.extras["detailed_rewards/orient_integral"] = rew_integral.sum()

@@ -26,7 +26,7 @@ task:
       - 0.0
       - 0.0
     control:
-      stiffness: 85.0
+      stiffness: 40.0
       damping: 2.0
       max_torque: 24.8
       actionScale: 13.5
@@ -60,16 +60,19 @@ task:
       - 180
       maxTransversalMotorDiff: -10
       maxTransversalMotorSum: 220
+      maxJointVelocity: 1500.0
     learn:
       rewardScale: 1
-      rOrientRewardScale: 1
-      rBaseAccRewardScale: 0.0001
+      rOrientRewardScale: 2
+      rBaseAccRewardScale: 0.0
       rActionClipRewardScale: 0.01
       rTorqueClipRewardScale: 1.0e-06
       rCollisionRewardScale: 0
-      rIsDoneRewardScale: 150
+      rIsDoneRewardScale: 100
       rInsideThresholdRewardScale: 1
-      rOrientIntegralRewardScale: 0.001
+      rOrientIntegralRewardScale: 0.0
+      rJointAccRewardScale: 1.0e-09
+      rJointVelClipRewardScale: 0.0
       cNumberOfLevels: 1
       cNextLevelThreshold: 5
       angleErrorThreshold: 2
@@ -200,7 +203,7 @@ task_name: ${task.name}
 experiment: ''
 RL_task: 3D
 num_envs: ''
-seed: 8381
+seed: 8861
 torch_deterministic: false
 max_iterations: ''
 physics_engine: physx
