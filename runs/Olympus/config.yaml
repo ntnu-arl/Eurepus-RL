@@ -4,7 +4,7 @@ task:
   env:
     numEnvs: 16
     envSpacing: 4.0
-    clipObservations: 5.0
+    clipObservations: 1000.0
     clipActions: 1000.0
     controlFrequencyInv: 4
     baseInitState:
@@ -26,7 +26,7 @@ task:
       - 0.0
       - 0.0
     control:
-      stiffness: 85.0
+      stiffness: 40.0
       damping: 2.0
       max_torque: 24.8
       actionScale: 13.5
@@ -53,21 +53,29 @@ task:
       BackKnee_BL: 0.0
     jointLimits:
       lateralMotor:
-      - -10
-      - 210
+      - -180
+      - 20
       transversalMotor:
       - -60
       - 180
-      maxTransversalMotorDiff: 10
+      maxTransversalMotorDiff: -10
       maxTransversalMotorSum: 220
+      maxJointVelocity: 1500.0
     learn:
-      rewardScale: 0.005
-      rOrientRewardScale: 1
+      rewardScale: 1
+      rOrientRewardScale: 2
       rBaseAccRewardScale: 0.0
-      rActionClipRewardScale: 0
-      rTorqueClipRewardScale: 0.0
-      rCollisionRewardScale: 10
-      rOrientRewardTemp: 0.5
+      rActionClipRewardScale: 0.01
+      rTorqueClipRewardScale: 1.0e-06
+      rCollisionRewardScale: 0
+      rIsDoneRewardScale: 100
+      rInsideThresholdRewardScale: 1
+      rOrientIntegralRewardScale: 0.0
+      rJointAccRewardScale: 1.0e-09
+      rJointVelClipRewardScale: 0.0
+      cNumberOfLevels: 1
+      cNextLevelThreshold: 5
+      angleErrorThreshold: 2
       episodeLength_s: 3
   sim:
     dt: 0.00208
@@ -137,14 +145,14 @@ train:
             name: default
           sigma_init:
             name: const_initializer
-            val: 0.0
+            val: 0
           fixed_sigma: true
       mlp:
         units:
         - 128
-        - 128
-        - 128
-        activation: tanh
+        - 64
+        - 64
+        activation: elu
         d2rl: false
         initializer:
           name: default
@@ -168,7 +176,7 @@ train:
       reward_shaper:
         scale_value: 1.0
       normalize_advantage: true
-      gamma: 0.9995
+      gamma: 0.99
       tau: 0.95
       e_clip: 0.2
       entropy_coef: 0.0
@@ -177,14 +185,16 @@ train:
       kl_threshold: 0.008
       truncate_grads: true
       grad_norm: 10.0
-      horizon_length: 48
-      minibatch_size: 384
-      mini_epochs: 5
+      horizon_length: 60
+      minibatch_size: 960
+      mini_epochs: 15
       critic_coef: 2
-      clip_value: true
+      clip_value: false
+      clip_actions: true
       seq_len: 4
-      bounds_loss_coef: 0
-      max_epochs: ${resolve_default:1000,${....max_iterations}}
+      bound_loss_type: bound
+      bounds_loss_coef: 0.01
+      max_epochs: ${resolve_default:3000,${....max_iterations}}
       save_best_after: 50
       score_to_win: 20000
       save_frequency: 50
@@ -193,7 +203,7 @@ task_name: ${task.name}
 experiment: ''
 RL_task: 3D
 num_envs: ''
-seed: 1526
+seed: 8861
 torch_deterministic: false
 max_iterations: ''
 physics_engine: physx
