@@ -4,7 +4,7 @@ task_name: ${task.name}
 # experiment name. defaults to name of training config
 experiment: ''
 # Task:
-RL_task : '2D_sym' # 2D_sym or 2D_asym
+RL_task : '3D' # 2D_sym or 2D_asym or 3D
 
 # if set to positive integer, overrides the default number of environments
 num_envs: ''
@@ -46,7 +46,7 @@ headless: True
 # enables livestream
 enable_livestream: False
 
-stream_type: "native" #native, webRTC
+stream_type: "webRTC" #native, webRTC
 
 # timeout for MT script
 mt_timeout: 30

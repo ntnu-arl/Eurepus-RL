@@ -12,8 +12,8 @@ env/
 *.DS_Store
 */runs/*
 runs
-utils
-
+plots
+Event_Files
 
 # VS Code specific
 .vscode/
