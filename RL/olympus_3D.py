@@ -102,7 +102,7 @@ class OlympusTask(RLTask):
         self._olympus_translation = torch.tensor(self._task_cfg["env"]["baseInitState"]["pos"])
         self._env_spacing = self._task_cfg["env"]["envSpacing"]
         self._num_observations = 31
-        self._num_actions = 24 #12
+        self._num_actions = 13 #24 or 12
         self._num_articulated_joints = 20
 
 
@@ -115,8 +115,8 @@ class OlympusTask(RLTask):
 
         RLTask.__init__(self, name, env)
 
-        self.joint_vel_old = torch.zeros([self._num_envs, self._num_actions], device=self._device)
-        self.joint_targets_old = torch.zeros([self._num_envs, self._num_actions], device=self._device)
+        self.joint_vel_old = torch.zeros([self._num_envs, 12 ], device=self._device) #self._num_actions
+        self.joint_targets_old = torch.zeros([self._num_envs, 12 ], device=self._device) #self._num_actions
 
         # Random initial euler angles after reset
         self._roll_sampler = Uniform(torch.tensor(-torch.pi, device=self._device), torch.pi)
@@ -288,22 +288,6 @@ class OlympusTask(RLTask):
             dim=-1,
         )
 
-        nan_obs = torch.cat(
-            (
-                motor_joint_pos,
-                motor_joint_vel,
-                base_rotation,
-                root_velocities,
-            ),
-            dim=-1,
-        )
-
-        nan_mask = torch.isnan(obs)
-        obs[nan_mask] = 0
-
-        full_nan_mask = torch.isnan(nan_obs)
-        self.any_nan_obs_mask = torch.any(full_nan_mask,dim=-1)
-
 
         self.obs_buf = obs.clone()
 
@@ -369,7 +353,7 @@ class OlympusTask(RLTask):
         # Dont apply filter
         new_targets = actions.clone()
         pos_target = new_targets[:, :12]
-        interpol_coeff = (new_targets[:, 12:] + 1) / 2
+        interpol_coeff = (new_targets[:, [12]] + 1) / 2
 
         # lineraly interpolate between min and max
         new_targets = 0.5 * pos_target * (
@@ -377,8 +361,9 @@ class OlympusTask(RLTask):
         ).view(1, -1) + 0.5 * (self._motor_joint_upper_targets_limits + self._motor_joint_lower_targets_limits).view(
             1, -1
         )
+        
 
-        self.current_policy_targets = (1 - interpol_coeff) * new_targets + interpol_coeff * self._olympusses.get_joint_positions(clone=True, joint_indices=self.actuated_idx)
+        self.current_policy_targets= (1 - interpol_coeff) * new_targets + interpol_coeff* self._olympusses.get_joint_positions(clone=True, joint_indices=self.actuated_idx)
         # self.current_policy_targets += actions * self._max_joint_vel * self.dt * self._controlFrequencyInv
 
         # clamp targets to avoid self collisions
@@ -636,7 +621,7 @@ class OlympusTask(RLTask):
 
         # Calculate rew_{change_dir}
         sign = motor_joint_vel*self.joint_vel_old
-        changed_dir_mask = sign < 0
+        changed_dir_mask = sign < -0.01
         rew_change_dir = - changed_dir_mask.float().sum(dim=-1) * self.rew_scales["r_change_dir"] * rew_orient *1.5
         self.joint_vel_old = motor_joint_vel
 
@@ -655,15 +640,10 @@ class OlympusTask(RLTask):
         rew_is_done[self._time_out] = (torch.pi/2 - orient_error[self._time_out]) * self.rew_scales["r_is_done"]
 
 
-        # Calculate rew_{is_done}
-        self.rew_is_done = torch.zeros_like(self.time_out, dtype=torch.float)
-        self.rew_is_done[self.time_out] = (torch.pi/2 -orient_error[self.time_out]) * self.rew_scales["r_is_done"] #torch.pi/2
-
-
         # Calculate inside threshold reward
         self._inside_threshold = (
                 torch.abs(quat_diff_rad(base_rotation, self.zero_rot)) < self._finished_orient_error_threshold
-            ).logical_and(self.time_out)
+            ).logical_and(self._time_out)
         rew_innside_threshold = self._inside_threshold.clone().float() * self.rew_scales["r_inside_threshold"]
 
 
@@ -684,7 +664,6 @@ class OlympusTask(RLTask):
             + rew_joint_acc
         ) * self.rew_scales["total"]
 
-        total_reward[self.any_nan_obs_mask] = 0
 
         # Add rewards to tensorboard log
         self.extras["detailed_rewards/collision"] = rew_collision.sum()
@@ -739,7 +718,7 @@ class OlympusTask(RLTask):
             should_upgrade_level = self._n_times_level_completed == self._next_level_threshold
             self._current_curriculum_levels += (should_upgrade_level).int()
 
-            self._current_curriculum_levels %= self._n_curriculum_levels  # go back to level 0 when gone through all
+            self._current_curriculum_levels[self._current_curriculum_levels == self._n_curriculum_levels ] = self._n_curriculum_levels - 1  # go back to level 0 when gone through all
             self._n_times_level_completed[should_upgrade_level] = 0  # reset level completer counter
 
             # log levels
