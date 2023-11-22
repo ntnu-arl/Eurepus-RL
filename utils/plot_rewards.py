@@ -11,7 +11,7 @@ plt.rcParams.update({
 })
 
 # Load TensorBoard event file
-log_path = '../runs/Olympus/summaries'
+log_path = '/Olympus-ws/in-air-stabilization/Event_Files/3D_sehr_gut_mitt_interpolation_kern'
 event_acc = event_accumulator.EventAccumulator(log_path)
 event_acc.Reload()
 
@@ -26,6 +26,9 @@ data_to_plot = {
     'detailed_rewards/action_clip/iter' : ['Action clip reward','Batch reward sum'],
     'detailed_rewards/collision/iter' : ['Collision reward','Batch reward sum'],
     'detailed_rewards/orient_integral/iter' : ['Orientation integral reward','Batch reward sum'],
+    'detailed_rewards/change_dir/iter' : ['Change direction reward','Batch reward sum'],
+    'detailed_rewards/regularize/iter' : ['Regularization reward','Batch reward sum'],
+    'detailed_rewards/velocity/iter' : ['Velocity reward','Batch reward sum'],
 
     'losses/a_loss' : ['Actor loss','loss'],
     'losses/bounds_loss' : ['Bounds loss','loss'],

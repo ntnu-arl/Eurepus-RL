@@ -102,7 +102,7 @@ class OlympusTask(RLTask):
         self._olympus_translation = torch.tensor(self._task_cfg["env"]["baseInitState"]["pos"])
         self._env_spacing = self._task_cfg["env"]["envSpacing"]
         self._num_observations = 31
-        self._num_actions = 13 #24 or 12
+        self._num_actions = 12 #24 or 12
         self._num_articulated_joints = 20
 
 
@@ -353,7 +353,7 @@ class OlympusTask(RLTask):
         # Dont apply filter
         new_targets = actions.clone()
         pos_target = new_targets[:, :12]
-        interpol_coeff = (new_targets[:, [12]] + 1) / 2
+        # interpol_coeff = (new_targets[:, [12]] + 1) / 2
 
         # lineraly interpolate between min and max
         new_targets = 0.5 * pos_target * (
@@ -362,7 +362,7 @@ class OlympusTask(RLTask):
             1, -1
         )
         
-
+        interpol_coeff = torch.exp(-self.last_orient_error**2 / 0.001).unsqueeze(-1)
         self.current_policy_targets= (1 - interpol_coeff) * new_targets + interpol_coeff* self._olympusses.get_joint_positions(clone=True, joint_indices=self.actuated_idx)
         # self.current_policy_targets += actions * self._max_joint_vel * self.dt * self._controlFrequencyInv
 
@@ -621,7 +621,7 @@ class OlympusTask(RLTask):
 
         # Calculate rew_{change_dir}
         sign = motor_joint_vel*self.joint_vel_old
-        changed_dir_mask = sign < -0.01
+        changed_dir_mask = sign < -0.05
         rew_change_dir = - changed_dir_mask.float().sum(dim=-1) * self.rew_scales["r_change_dir"] * rew_orient *1.5
         self.joint_vel_old = motor_joint_vel
 
@@ -718,7 +718,7 @@ class OlympusTask(RLTask):
             should_upgrade_level = self._n_times_level_completed == self._next_level_threshold
             self._current_curriculum_levels += (should_upgrade_level).int()
 
-            self._current_curriculum_levels[self._current_curriculum_levels == self._n_curriculum_levels ] = self._n_curriculum_levels - 1  # go back to level 0 when gone through all
+            self._current_curriculum_levels[self._current_curriculum_levels == self._n_curriculum_levels ] = self._n_curriculum_levels - 1 
             self._n_times_level_completed[should_upgrade_level] = 0  # reset level completer counter
 
             # log levels

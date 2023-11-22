@@ -67,7 +67,7 @@ env:
     rIsDoneRewardScale        : 100 #150
     rInsideThresholdRewardScale: 1 # Is multiplied with 1 (= "true") if innside threshold when reset
     rOrientIntegralRewardScale: 0 #0.001 #0.01 # 0.00001
-    rJointAccRewardScale      : 0.000000001
+    rJointAccRewardScale      : 0 #0.000000001
     rVelocity                 : 0.00002
     rChangeDir                : 0.035 #0.03  
     rRegularize               : 0.002 #0.001 
