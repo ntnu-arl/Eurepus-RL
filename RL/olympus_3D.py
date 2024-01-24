@@ -295,52 +295,6 @@ class OlympusTask(RLTask):
 
         return observations
 
-    def pre_physics_step(self) -> None:
-        """
-        Prepares the quadroped for the next physichs step.
-        NB this has to be done before each call to world.step().
-        NB this method does not acceopt control signals as input,
-        please see the apply_contol method.
-        """
-
-        # Check if simulation is running
-        if not self._env._world.is_playing():
-            return
-
-        # Calculate spring
-        # spring_actions = self.spring.forward()
-
-        # Handle resets
-        reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
-        if len(reset_env_ids) > 0:
-            self.reset_idx(reset_env_ids)
-            # spring_actions.joint_efforts[reset_env_ids, :] = 0
-
-        # Apply spring
-        # self._olympusses.apply_action(spring_actions)
-    
-    def post_physics_step(self):
-        """ Processes RL required computations for observations, states, rewards, resets, and extras.
-            Also maintains progress buffer for tracking step count per environment.
-
-        Returns:
-            obs_buf(torch.Tensor): Tensor of observation data.
-            rew_buf(torch.Tensor): Tensor of rewards data.
-            reset_buf(torch.Tensor): Tensor of resets/dones data.
-            extras(dict): Dictionary of extras data.
-        """
-
-        self.progress_buf[:] += 1
-
-        if self._env._world.is_playing():
-            self.get_observations()
-            self.get_states()
-            self.is_done()
-            self.calculate_metrics()
-            self.get_extras()
-
-        return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
-
     def apply_control(self, actions) -> None:
         """
         Apply control signals to the quadropeds.
@@ -371,6 +325,56 @@ class OlympusTask(RLTask):
 
         # Set targets
         self._olympusses.set_joint_position_targets(self.current_clamped_targets, joint_indices=self.actuated_idx)
+
+    def pre_physics_step(self,action) -> None:
+        """
+        Prepares the quadroped for the next physichs step.
+        NB this has to be done before each call to world.step().
+        NB this method does not acceopt control signals as input,
+        please see the apply_contol method.
+        """
+
+        # Check if simulation is running
+        if not self._env._world.is_playing():
+            return
+
+        # Calculate spring
+        # spring_actions = self.spring.forward()
+
+        # Handle resets
+        reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
+        if len(reset_env_ids) > 0:
+            self.reset_idx(reset_env_ids)
+            # spring_actions.joint_efforts[reset_env_ids, :] = 0
+
+        # Apply spring
+        # self._olympusses.apply_action(spring_actions)
+
+        self.apply_control(action)
+    
+    def post_physics_step(self):
+        """ Processes RL required computations for observations, states, rewards, resets, and extras.
+            Also maintains progress buffer for tracking step count per environment.
+
+        Returns:
+            obs_buf(torch.Tensor): Tensor of observation data.
+            rew_buf(torch.Tensor): Tensor of rewards data.
+            reset_buf(torch.Tensor): Tensor of resets/dones data.
+            extras(dict): Dictionary of extras data.
+        """
+
+        self.progress_buf[:] += 1
+
+        if self._env._world.is_playing():
+            self.get_observations()
+            self.get_states()
+            self.is_done()
+            self.calculate_metrics()
+            self.get_extras()
+
+        return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
+
+
 
     def reset_idx(self, env_ids):
         num_resets = len(env_ids)
