@@ -155,7 +155,7 @@ class OlympusTask(RLTask):
         )
 
         self.default_actuated_joints_pos = torch.zeros(
-            (self.num_envs, 12),  # self._num_actuated,
+            (self.num_envs, self._num_actions),  
             dtype=torch.float,
             device=self.device,
             requires_grad=False,
@@ -210,7 +210,6 @@ class OlympusTask(RLTask):
         """
         new_targets = actions.clone()
         pos_target = new_targets[:, :12]
-        # interpol_coeff = (new_targets[:, [12]] + 1) / 2
 
         # lineraly interpolate between min and max
         new_targets = 0.5 * pos_target * (
@@ -220,8 +219,7 @@ class OlympusTask(RLTask):
         )
         
         interpol_coeff = torch.exp(-self._last_orient_error**2 / 0.001).unsqueeze(-1)
-        self.current_policy_targets= (1 - interpol_coeff) * new_targets + interpol_coeff* self._olympusses.get_joint_positions(clone=True, joint_indices=self.actuated_idx)
-        # self.current_policy_targets += actions * self._max_joint_vel * self._dt * self._controlFrequencyInv
+        self.current_policy_targets = (1 - interpol_coeff) * new_targets + interpol_coeff* self._olympusses.get_joint_positions(clone=True, joint_indices=self.actuated_idx)
 
         # clamp targets to avoid self collisions
         self.current_clamped_targets = self._clamp_joint_angels(self.current_policy_targets)
@@ -229,7 +227,7 @@ class OlympusTask(RLTask):
         # Set targets
         self._olympusses.set_joint_position_targets(self.current_clamped_targets, joint_indices=self.actuated_idx)
 
-    def pre_physics_step(self,action) -> None:
+    def pre_physics_step(self, action) -> None:
         """
         Prepares the quadroped for the next physichs step.
         NB this has to be done before each call to world.step().
@@ -241,17 +239,10 @@ class OlympusTask(RLTask):
         if not self._env._world.is_playing():
             return
 
-        # Calculate spring
-        # spring_actions = self.spring.forward()
-
         # Handle resets
         reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
         if len(reset_env_ids) > 0:
             self.reset_idx(reset_env_ids)
-            # spring_actions.joint_efforts[reset_env_ids, :] = 0
-
-        # Apply spring
-        # self._olympusses.apply_action(spring_actions)
 
         self.apply_control(action)
     
