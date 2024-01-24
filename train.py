@@ -132,7 +132,7 @@ def parse_hydra_configs(cfg: DictConfig):
     elif cfg.RL_task == "3D":
         from RL.olympus_3D import OlympusTask
     else:
-        sys.stderr.write("ERROR: Invalid config provided for RL_task. Must be one of: 2D_sym, 2D_asym")
+        sys.stderr.write("ERROR: Invalid config provided for RL_task. Must be one of: 3D, 2D_sym, 2D_asym")
         sys.exit(1)
 
     from omniisaacgymenvs.utils.config_utils.sim_config import SimConfig
