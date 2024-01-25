@@ -87,11 +87,11 @@ class OlympusTask(RLTask):
         
         # Define orientation error to be accepted as completed
         self._finished_orient_error_threshold = self._task_cfg["env"]["learn"]["angleErrorThreshold"] * torch.pi / 180
-        self._inside_threshold = torch.zeros((self.num_envs,), device=self._device)
-        self._last_orient_error = torch.pi * torch.ones((self.num_envs,), device=self._device)
+        self._inside_threshold = torch.zeros((self._num_envs,), device=self._device)
+        self._last_orient_error = torch.pi * torch.ones((self._num_envs,), device=self._device)
 
         # Initialise orientation error intergral
-        self._orient_error_integral = torch.zeros((self.num_envs,), device=self._device)
+        self._orient_error_integral = torch.zeros((self._num_envs,), device=self._device)
 
         # Convenience var for zero rotation quaternion
         self._zero_rot = torch.tensor([1,0,0,0], device=self._device).repeat(self._num_envs, 1)
@@ -113,9 +113,13 @@ class OlympusTask(RLTask):
 
         for prim in self._olympusses.rigid_prims:
             scene.add(prim)
+            
         return
 
     def get_olympus(self):
+
+        # Configure olympus robot instance
+
         olympus = Olympus(
             prim_path=self.default_zero_env_path + "/Olympus",
             usd_path="/Olympus-ws/Olympus-USD/Olympus/v2/olympus_v2_reorient_instanceable.usd",
@@ -128,17 +132,15 @@ class OlympusTask(RLTask):
             self._sim_config.parse_actor_config("Olympus"),
         )
 
-        # Configure joint properties
-        joint_paths = []
-
+        actuated_paths = []
         for quadrant in ["FR", "FL", "BR", "BL"]:
-            joint_paths.append(f"Body/LateralMotor_{quadrant}")
-            joint_paths.append(f"MotorHousing_{quadrant}/FrontTransversalMotor_{quadrant}")
-            joint_paths.append(f"MotorHousing_{quadrant}/BackTransversalMotor_{quadrant}")
+            actuated_paths.append(f"Body/LateralMotor_{quadrant}")
+            actuated_paths.append(f"MotorHousing_{quadrant}/FrontTransversalMotor_{quadrant}")
+            actuated_paths.append(f"MotorHousing_{quadrant}/BackTransversalMotor_{quadrant}")
 
-        for joint_path in joint_paths:
+        for actuated_path in actuated_paths:
             set_drive(
-                f"{olympus.prim_path}/{joint_path}",
+                f"{olympus.prim_path}/{actuated_path}",
                 "angular",
                 "position",
                 0,
@@ -147,15 +149,17 @@ class OlympusTask(RLTask):
                 self._max_torque,
             )
 
+        # Indexing of default joint angles
+
         self.default_articulated_joints_pos = torch.zeros(
-            (self.num_envs, self._num_articulated_joints),
+            (self._num_envs, self._num_articulated_joints),
             dtype=torch.float,
             device=self.device,
             requires_grad=False,
         )
 
         self.default_actuated_joints_pos = torch.zeros(
-            (self.num_envs, self._num_actions),  
+            (self._num_envs, self._num_actions),  
             dtype=torch.float,
             device=self.device,
             requires_grad=False,
@@ -165,7 +169,18 @@ class OlympusTask(RLTask):
         for i in range(self._num_articulated_joints):
             name = dof_names[i]
             angle = self._named_default_joint_angles[name]
+
             self.default_articulated_joints_pos[:, i] = angle
+
+        actuated_names = []
+        for actuated_path in actuated_paths:
+            actuated_names.append(actuated_path.split("/")[-1])
+        
+        i_actuated = 0
+        for i, name in enumerate(dof_names):
+            if name in actuated_names:
+                self.default_actuated_joints_pos[:, i_actuated] = self.default_articulated_joints_pos[:, i]
+                i_actuated += 1
 
     def get_observations(self) -> dict:
         # Read motor observations
@@ -212,11 +227,8 @@ class OlympusTask(RLTask):
         pos_target = new_targets[:, :12]
 
         # lineraly interpolate between min and max
-        new_targets = 0.5 * pos_target * (
-            self._motor_joint_upper_targets_limits - self._motor_joint_lower_targets_limits
-        ).view(1, -1) + 0.5 * (self._motor_joint_upper_targets_limits + self._motor_joint_lower_targets_limits).view(
-            1, -1
-        )
+        new_targets = 0.5 * pos_target * (self._motor_joint_upper_targets_limits - self._motor_joint_lower_targets_limits).view(1, -1) \
+                    + 0.5 * (self._motor_joint_upper_targets_limits + self._motor_joint_lower_targets_limits).view(1, -1)
         
         interpol_coeff = torch.exp(-self._last_orient_error**2 / 0.001).unsqueeze(-1)
         self.current_policy_targets = (1 - interpol_coeff) * new_targets + interpol_coeff* self._olympusses.get_joint_positions(clone=True, joint_indices=self.actuated_idx)
@@ -279,20 +291,13 @@ class OlympusTask(RLTask):
         # For train: randomize joint states
         else:
             front_transversal = torch.rand((num_resets * 4,), device=self._device)
-            # front_transversal = linear_rescale(front_transversal, *self.transversal_motor_limits)
             front_transversal = linear_rescale(
                 front_transversal,
                 torch.tensor(5.0, device=self._device).deg2rad(),
                 torch.tensor(100.0, device=self._device).deg2rad(),
             )
+
             back_transversal = torch.rand((num_resets * 4,), device=self._device)
-            # back_transversal_min = torch.max(
-            #     self._max_transversal_motor_diff - front_transversal, self.transversal_motor_limits[0]
-            # )
-            # back_transversal_max = torch.min(
-            #     self._max_transversal_motor_sum - front_transversal, self.transversal_motor_limits[1]
-            # )
-            # back_transversal = linear_rescale(back_transversal, back_transversal_min, back_transversal_max)
             back_transversal = linear_rescale(
                 back_transversal,
                 torch.tensor(5.0, device=self._device).deg2rad(),

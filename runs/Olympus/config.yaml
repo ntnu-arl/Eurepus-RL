@@ -2,31 +2,17 @@ task:
   name: Olympus
   physics_engine: ${..physics_engine}
   env:
-    numEnvs: 16
+    numEnvs: ${resolve_default:128,${...num_envs}}
     envSpacing: 4.0
     clipObservations: 1000.0
     clipActions: 1000.0
     controlFrequencyInv: 4
-    baseInitState:
-      pos:
-      - 0.0
-      - 0.0
-      - 0.52
-      rot:
-      - 0.0
-      - 0.0
-      - 0.0
-      - 1.0
-      vLinear:
-      - 0.0
-      - 0.0
-      - 0.0
-      vAngular:
-      - 0.0
-      - 0.0
-      - 0.0
+    RLSetup:
+      num_observations: 31
+      num_actions: 12
+      num_articulated_joints: 20
     control:
-      stiffness: 40.0
+      stiffness: 85.0
       damping: 2.0
       max_torque: 24.8
       actionScale: 13.5
@@ -62,20 +48,24 @@ task:
       maxTransversalMotorSum: 220
       maxJointVelocity: 1500.0
     learn:
-      rewardScale: 1
-      rOrientRewardScale: 2
-      rBaseAccRewardScale: 0.0
-      rActionClipRewardScale: 0.01
-      rTorqueClipRewardScale: 1.0e-06
-      rCollisionRewardScale: 0
-      rIsDoneRewardScale: 100
-      rInsideThresholdRewardScale: 1
-      rOrientIntegralRewardScale: 0.0
-      rJointAccRewardScale: 1.0e-09
-      rJointVelClipRewardScale: 0.0
+      rewards:
+        total: 1
+        r_orient: 2
+        r_base_acc: 0
+        r_action_clip: 0.01
+        r_torque_clip: 1.0e-06
+        r_collision: 0
+        r_is_done: 100
+        r_inside_threshold: 1
+        r_orient_integral: 0
+        r_joint_acc: 0
+        r_velocity: 2.0e-05
+        r_change_dir: 0.035
+        r_regularize: 0.002
       cNumberOfLevels: 1
       cNextLevelThreshold: 5
       angleErrorThreshold: 2
+      rOrientRewardTemp: 0.7
       episodeLength_s: 3
   sim:
     dt: 0.00208
@@ -158,8 +148,8 @@ train:
           name: default
         regularizer:
           name: None
-    load_checkpoint: ${if:${...checkpoint},True,False}
-    load_path: ${...checkpoint}
+    load_checkpoint: false
+    load_path: ''
     config:
       name: ${resolve_default:Olympus,${....experiment}}
       full_experiment_name: ${.name}
@@ -186,7 +176,7 @@ train:
       truncate_grads: true
       grad_norm: 10.0
       horizon_length: 60
-      minibatch_size: 960
+      minibatch_size: 384
       mini_epochs: 15
       critic_coef: 2
       clip_value: false
@@ -203,7 +193,7 @@ task_name: ${task.name}
 experiment: ''
 RL_task: 3D
 num_envs: ''
-seed: 8861
+seed: 5293
 torch_deterministic: false
 max_iterations: ''
 physics_engine: physx
@@ -214,14 +204,15 @@ rl_device: cuda:0
 multi_gpu: false
 num_threads: 4
 solver_type: 0
-test: true
-checkpoint: /Olympus-ws/in-air-stabilization/runs/Olympus/nn/Olympus.pth
+test: false
+checkpoint: ''
 headless: true
-enable_livestream: true
-stream_type: native
+enable_livestream: false
+stream_type: webRTC
 mt_timeout: 30
 wandb_activate: false
 wandb_group: ''
 wandb_name: ${train.params.config.name}
 wandb_entity: ''
 wandb_project: omniisaacgymenvs
+warp: false
