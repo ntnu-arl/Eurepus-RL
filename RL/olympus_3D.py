@@ -80,10 +80,8 @@ class OlympusTask(RLTask):
         self._max_transversal_motor_diff = (self._task_cfg["env"]["jointLimits"]["maxTransversalMotorDiff"] * torch.pi / 180)
         self._max_transversal_motor_sum = (self._task_cfg["env"]["jointLimits"]["maxTransversalMotorSum"] * torch.pi / 180)
 
-        # Initialisations
+        # Initialise RL task
         RLTask.__init__(self, name, env)
-        self._joint_vel_old = torch.zeros([self._num_envs, self._num_actions ], device=self._device)
-        self._joint_targets_old = torch.zeros([self._num_envs, self._num_actions], device=self._device)
         
         # Define orientation error to be accepted as completed
         self._finished_orient_error_threshold = self._task_cfg["env"]["learn"]["angleErrorThreshold"] * torch.pi / 180
@@ -95,6 +93,9 @@ class OlympusTask(RLTask):
 
         # Convenience var for zero rotation quaternion
         self._zero_rot = torch.tensor([1,0,0,0], device=self._device).repeat(self._num_envs, 1)
+
+        # Initialise forward kinematics class instance
+        self._forward_kin = OlympusForwardKinematics(self._device)
 
         # Initialize logger
         self._obs_count = 0
@@ -192,8 +193,8 @@ class OlympusTask(RLTask):
         _, base_pitch, _ = get_euler_xyz(base_rotation)
 
         # Read base angular velocity
-        root_velocities = self._olympusses.get_velocities(clone=False)
-        ang_velocity = root_velocities[:, 3:6]
+        base_velocities = self._olympusses.get_velocities(clone=False)
+        ang_velocity = base_velocities[:, 3:6]
         base_angular_vel_pitch = ang_velocity[:, 1]
 
         # Make dimensions of pitch and ang_vel_pitch fit that of motor_joint_pos and motor_joint_vel
@@ -241,10 +242,8 @@ class OlympusTask(RLTask):
 
     def pre_physics_step(self, action) -> None:
         """
-        Prepares the quadroped for the next physichs step.
+        Prepares the quadruped for the next physics step.
         NB this has to be done before each call to world.step().
-        NB this method does not acceopt control signals as input,
-        please see the apply_contol method.
         """
 
         # Check if simulation is running
@@ -256,6 +255,7 @@ class OlympusTask(RLTask):
         if len(reset_env_ids) > 0:
             self.reset_idx(reset_env_ids)
 
+        # Apply the control action to the quadruped
         self.apply_control(action)
     
     def post_physics_step(self):
@@ -280,72 +280,74 @@ class OlympusTask(RLTask):
 
         return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
 
+    
+    def random_leg_positions(self, num_resets, env_ids):
+        front_transversal = torch.rand((num_resets * 4,), device=self._device)
+        front_transversal = linear_rescale(
+            front_transversal,
+            torch.tensor(5.0, device=self._device).deg2rad(),
+            torch.tensor(100.0, device=self._device).deg2rad(),
+        )
+
+        back_transversal = torch.rand((num_resets * 4,), device=self._device)
+        back_transversal = linear_rescale(
+            back_transversal,
+            torch.tensor(5.0, device=self._device).deg2rad(),
+            torch.tensor(100.0, device=self._device).deg2rad(),
+        )
+
+        knee_outer, knee_inner, _ = self._forward_kin._calculate_knee_angles(front_transversal, back_transversal)
+
+        lateral = torch.rand((num_resets * 4,), device=self._device)
+        lateral = linear_rescale(
+            lateral,
+            torch.tensor(-100.0, device=self._device).deg2rad(),
+            torch.tensor(10.0, device=self._device).deg2rad(),
+        )
+
+        dof_pos = self.default_articulated_joints_pos[env_ids]
+        dof_pos[:, self.actuated_lateral_idx] = lateral.reshape((num_resets, 4))
+        dof_pos[:, self.front_transversal_indicies] = front_transversal.reshape((num_resets, 4))
+        dof_pos[:, self.back_transversal_indicies] = back_transversal.reshape((num_resets, 4))
+        dof_pos[:, self._knee_outer_indicies] = knee_outer.reshape((num_resets, 4))
+        dof_pos[:, self._knee_inner_indicies] = knee_inner.reshape((num_resets, 4))
+
+        return dof_pos
+
     def reset_idx(self, env_ids):
         num_resets = len(env_ids)
+        indices = env_ids.to(dtype=torch.int32)
         
-        # Set initial joint states
-        # For test:
+        # Reset joint positions
         if self._cfg["test"]:
             dof_pos = self.default_articulated_joints_pos[env_ids]
-
-        # For train: randomize joint states
         else:
-            front_transversal = torch.rand((num_resets * 4,), device=self._device)
-            front_transversal = linear_rescale(
-                front_transversal,
-                torch.tensor(5.0, device=self._device).deg2rad(),
-                torch.tensor(100.0, device=self._device).deg2rad(),
-            )
+            dof_pos = self.random_leg_positions(num_resets, env_ids)
+        
+        self._olympusses.set_joint_positions(dof_pos, indices)
 
-            back_transversal = torch.rand((num_resets * 4,), device=self._device)
-            back_transversal = linear_rescale(
-                back_transversal,
-                torch.tensor(5.0, device=self._device).deg2rad(),
-                torch.tensor(100.0, device=self._device).deg2rad(),
-            )
-
-            knee_outer, knee_inner, _ = self._forward_kin._calculate_knee_angles(front_transversal, back_transversal)
-
-            lateral = torch.rand((num_resets * 4,), device=self._device)
-            # lateral = linear_rescale(lateral, *self.lateral_motor_limits)
-            lateral = linear_rescale(
-                lateral,
-                torch.tensor(-100.0, device=self._device).deg2rad(),
-                torch.tensor(10.0, device=self._device).deg2rad(),
-            )
-
-            dof_pos = self.default_articulated_joints_pos[env_ids]
-            dof_pos[:, self.actuated_lateral_idx] = lateral.reshape((num_resets, 4))
-            dof_pos[:, self.front_transversal_indicies] = front_transversal.reshape((num_resets, 4))
-            dof_pos[:, self.back_transversal_indicies] = back_transversal.reshape((num_resets, 4))
-            dof_pos[:, self._knee_outer_indicies] = knee_outer.reshape((num_resets, 4))
-            dof_pos[:, self._knee_inner_indicies] = knee_inner.reshape((num_resets, 4))
-
+        # Reset joint velocities
         dof_vel = torch.zeros((num_resets, self._olympusses.num_dof), device=self._device)
+        self._olympusses.set_joint_velocities(dof_vel, indices)
 
-        # Set initial motor targets
+        # Reset motor targets
         self.current_policy_targets[env_ids] = dof_pos[:, self.actuated_idx]
         self._olympusses.set_joint_position_targets(
             self.current_policy_targets[env_ids], indices=env_ids, joint_indices=self.actuated_idx
         )
 
-        # Set initial root states
-        root_vel = torch.zeros((num_resets, 6), device=self._device)
+        # Reset base position and velocity
+        base_vel = torch.zeros((num_resets, 6), device=self._device)
+        self._olympusses.set_velocities(base_vel, indices)
 
         rand_rot = self._random_quaternion(num_resets)
-
-        # Apply resets
-        indices = env_ids.to(dtype=torch.int32)
         self._olympusses.set_world_poses(
-            self.initial_root_pos[env_ids].clone(),
+            self.initial_base_pos[env_ids].clone(),
             rand_rot,
             indices,
         )
-        self._olympusses.set_velocities(root_vel, indices)
 
-        self._olympusses.set_joint_positions(dof_pos, indices)
-        self._olympusses.set_joint_velocities(dof_vel, indices)
-
+        # Reset orientation error integral state
         self._orient_error_integral[env_ids] = 0
 
         # Bookkeeping
@@ -354,10 +356,198 @@ class OlympusTask(RLTask):
         self.last_actions[env_ids] = 0.0
         self.last_motor_joint_vel[env_ids] = 0.0
 
-    def post_reset(self):
-        self._forward_kin = OlympusForwardKinematics(self._device)
-        self.spring = OlympusSpring(k=400, olympus_view=self._olympusses, equality_dist=0.2, pulley_radius=0.02)
 
+
+    def calculate_metrics(self) -> None:
+        # Read base rotation
+        base_position, base_rotation = self._olympusses.get_world_poses(clone=False)
+
+        # rew_{orient}
+        base_target = self._zero_rot
+        orient_error = torch.abs(quat_diff_rad(base_rotation, base_target))
+        rew_orient = torch.exp(-orient_error / 0.7) * self._rew_scales["r_orient"]
+
+        # rew_integral
+        self._orient_error_integral += orient_error * self._dt * self._controlFrequencyInv
+        rew_integral = -self._orient_error_integral**2 * self._rew_scales["r_orient_integral"]
+
+        # rew_{base_acc}
+        base_velocities = self._olympusses.get_velocities(clone=False)
+        velocity = base_velocities[:, 0:3]
+        rew_base_acc = (
+            -torch.norm((velocity - self.last_vel) / (self._dt * self._controlFrequencyInv), dim=1) ** 2
+            * self._rew_scales["r_base_acc"]
+        )
+
+        # rew_{action_clip}
+        rew_action_clip = (
+            -torch.norm(self.current_policy_targets - self.current_clamped_targets, dim=1) ** 2
+            * self._rew_scales["r_action_clip"]
+        )
+
+        # rew_{torque_clip}
+        motor_joint_pos = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
+        motor_joint_vel = self._olympusses.get_joint_velocities(clone=False, joint_indices=self.actuated_idx)
+        commanded_torques = self._Kp * (self.current_policy_targets - motor_joint_pos) - self._Kd * motor_joint_vel
+        applied_torques = commanded_torques.clamp(-self._max_torque, self._max_torque)
+        rew_torque_clip = (
+            -torch.norm(commanded_torques - applied_torques, dim=1) ** 2 * self._rew_scales["r_torque_clip"]
+        )
+
+        # rew_{joint_acc}
+        joint_acc = (motor_joint_vel - self.last_motor_joint_vel) / (self._dt * self._controlFrequencyInv)
+        rew_joint_acc = -torch.norm(joint_acc, dim=1) ** 2 * self._rew_scales["r_joint_acc"]
+
+        # rew_{velocity}
+        rew_velocity = (
+            -torch.norm(motor_joint_vel, dim = -1) **2 * self._rew_scales["r_velocity"] 
+        )
+
+        # rew_{change_dir}
+        sign = motor_joint_vel*self.last_motor_joint_vel
+        changed_dir_mask = sign < -0.05
+        rew_change_dir = - changed_dir_mask.float().sum(dim=-1) * self._rew_scales["r_change_dir"] * rew_orient *1.5
+
+        # rew_{regularize}
+        rew_regularize = -torch.norm(applied_torques-self.joint_targets_old, dim=-1) * self._rew_scales["r_regularize"] * rew_orient * 1.5
+
+        # rew_{collision}
+        rew_collision = -self._collision_buff.clone().float() * self._rew_scales["r_collision"] 
+
+        # rew_inside_threshold
+        rew_innside_threshold = self._inside_threshold.clone().float() * self._rew_scales["r_inside_threshold"]
+
+        # rew_{is_done}
+        rew_is_done = torch.zeros_like(self._time_out, dtype=torch.float)
+        rew_is_done[self._time_out] = (torch.pi/2 - orient_error[self._time_out]) * self._rew_scales["r_is_done"]
+
+
+        # rew_inside_threshhold
+        self._inside_threshold = (
+                torch.abs(quat_diff_rad(base_rotation, self._zero_rot)) < self._finished_orient_error_threshold
+            ).logical_and(self._time_out)
+        rew_innside_threshold = self._inside_threshold.clone().float() * self._rew_scales["r_inside_threshold"]
+
+
+        # Calculate total reward
+        total_reward = (
+            rew_orient
+            + rew_integral
+            + rew_base_acc
+            + rew_action_clip
+            + rew_torque_clip
+            + rew_collision
+            + rew_innside_threshold
+            + rew_is_done
+            + rew_velocity
+            + rew_change_dir
+            + rew_regularize
+            + rew_joint_acc
+        ) * self._rew_scales["total"]
+
+
+        # Add rewards to tensorboard log
+        self.extras["detailed_rewards/collision"] = rew_collision.mean()
+        self.extras["detailed_rewards/base_acc"] = rew_base_acc.mean()
+        self.extras["detailed_rewards/action_clip"] = rew_action_clip.mean()
+        self.extras["detailed_rewards/joint_acc"] = rew_joint_acc.mean()
+        self.extras["detailed_rewards/torque_clip"] = rew_torque_clip.mean()
+        self.extras["detailed_rewards/orient"] = rew_orient.mean()
+        self.extras["detailed_rewards/orient_integral"] = rew_integral.mean()
+        self.extras["detailed_rewards/inside_threshold"] = rew_innside_threshold.mean()
+        self.extras["detailed_rewards/is_done"] = rew_is_done.mean()
+        self.extras["detailed_rewards/velocity"] = rew_velocity.mean()
+        self.extras["detailed_rewards/regularize"] = rew_regularize.mean()
+        self.extras["detailed_rewards/change_dir"] = rew_change_dir.mean()
+        self.extras["detailed_rewards/total_reward"] = total_reward.mean()
+
+        # Save last values
+        self.last_actions = self.actions.clone()
+        self.last_motor_joint_vel = motor_joint_vel.clone()
+        self.last_vel = velocity.clone()
+        self._last_orient_error = orient_error.clone()
+        self.joint_targets_old = applied_torques
+
+        # Place total reward in buffer
+        self.rew_buf = total_reward.detach().clone()
+
+    def is_done(self) -> None:
+        # Get collisions
+        self._collision_buff = self._olympusses.is_collision()
+        # Get timeout
+        self._time_out = self.progress_buf >= self._max_episode_length - 1
+        # Get joint violations
+        motor_joint_pos = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
+        motor_joint_pos_clamped = self._clamp_joint_angels(motor_joint_pos)
+        motor_joint_violations = (torch.abs(motor_joint_pos - motor_joint_pos_clamped) > 1e-6).any(dim=1)
+        self._collision_buff = self._collision_buff.logical_or(motor_joint_violations)
+
+        # Combine resets
+        reset = self._time_out.logical_or(self._collision_buff)
+        
+        # Inside threshold
+        _, base_rotation = self._olympusses.get_world_poses(clone=False)
+        orient_error = torch.abs(quat_diff_rad(base_rotation, self._zero_rot))
+        self._inside_threshold = (orient_error < self._finished_orient_error_threshold).logical_and(self._time_out)
+        self.extras[f"progress/inside_threshold"] = self._inside_threshold.sum()
+
+        # Reset buf might already be set to 1 if nan values are detected
+        self.reset_buf = torch.logical_or(reset, self.reset_buf)
+
+    def post_physics_step(self):
+        """Processes computations for observations, states, rewards, resets, and extras.
+            Also maintains progress buffer for tracking step count per environment.
+
+        Returns:
+            obs_buf(torch.Tensor): Tensor of observation data.
+            rew_buf(torch.Tensor): Tensor of rewards data.
+            reset_buf(torch.Tensor): Tensor of resets/dones data.
+            extras(dict): Dictionary of extras data.
+        """
+
+        self.progress_buf[:] += 1
+
+        if self._env._world.is_playing():
+            self.is_done()
+            self.calculate_metrics()
+            self.get_observations()
+            self.get_states()
+            self.get_extras()
+
+        return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
+
+    def _clamp_joint_angels(self, joint_targets):
+        joint_targets = joint_targets.clamp(
+            self._motor_joint_lower_targets_limits, self._motor_joint_upper_targets_limits
+        )
+
+        front_pos = joint_targets[:, self.front_transversal_indicies]
+        back_pos = joint_targets[:, self.back_transversal_indicies]
+
+        motor_joint_sum = (front_pos + back_pos) - self._max_transversal_motor_diff
+        clamp_mask = motor_joint_sum < 0
+        front_pos[clamp_mask] -= motor_joint_sum[clamp_mask] / 2
+        back_pos[clamp_mask] -= motor_joint_sum[clamp_mask] / 2
+
+        clamp_mask_wide = motor_joint_sum > self._max_transversal_motor_sum
+        front_pos[clamp_mask_wide] -= (motor_joint_sum[clamp_mask_wide] - self._max_transversal_motor_sum) / 2
+        back_pos[clamp_mask_wide] -= (motor_joint_sum[clamp_mask_wide] - self._max_transversal_motor_sum) / 2
+
+        joint_targets[:, self.front_transversal_indicies] = front_pos
+        joint_targets[:, self.back_transversal_indicies] = back_pos
+        return joint_targets
+
+    def _random_quaternion(self, n):
+        i,j,k = torch.rand(n,3, device=self._device).unbind(dim=-1)
+        x = torch.sqrt(1 - i) * torch.sin(2 * torch.pi * j)
+        y = torch.sqrt(1 - i) * torch.cos(2 * torch.pi * j)
+        z = torch.sqrt(i) * torch.sin(2 * torch.pi * k)
+        w = torch.sqrt(i) * torch.cos(2 * torch.pi * k)
+        return torch.stack((w,x,y,z), dim=-1)
+
+    def post_reset(self):
+        """ Called only once during initialisation to populate variables and initialise envs.
+        """
         self.actuated_name2idx = {}
         for i, name in enumerate(self._olympusses.dof_names):
             if "Knee" not in name:
@@ -427,7 +617,7 @@ class OlympusTask(RLTask):
         self._motor_joint_upper_targets_limits = self.olympus_motor_joint_upper_limits.clone()  # + 15 * torch.pi / 180
         self._motor_joint_lower_targets_limits = self.olympus_motor_joint_lower_limits.clone()  # - 15 * torch.pi / 180
 
-        self.initial_root_pos, self.initial_root_rot = self._olympusses.get_world_poses()
+        self.initial_base_pos, self.initial_base_rot = self._olympusses.get_world_poses()
         self.current_policy_targets = self.default_actuated_joints_pos.clone()
 
         self.actions = torch.zeros(
@@ -456,208 +646,17 @@ class OlympusTask(RLTask):
             requires_grad=False,
         )
 
+        self.joint_targets_old = torch.zeros(
+            [self._num_envs, self._num_actions], 
+            device=self._device
+        )
+
         self.time_out_buf = torch.zeros_like(self.reset_buf)
 
-        # randomize all envs
+        # Initialise envs
         indices = torch.arange(self._olympusses.count, dtype=torch.int64, device=self._device)
         self.reset_idx(indices)
 
-    def calculate_metrics(self) -> None:
-        # Read base rotation
-        base_position, base_rotation = self._olympusses.get_world_poses(clone=False)
-
-
-        # Calculate rew_{orient}
-        base_target = self._zero_rot
-        orient_error = torch.abs(quat_diff_rad(base_rotation, base_target))
-        rew_orient = torch.exp(-orient_error / 0.7) * self._rew_scales["r_orient"]
-        # rew_orient[self._inside_threshold] = 0
-        # rew_orient = -orient_error * self._rew_scales["r_orient"]
-        # rew_orient = (torch.pi - orient_error) / torch.pi * self._rew_scales["r_orient"]
-
-        self._orient_error_integral += orient_error * self._dt * self._controlFrequencyInv
-        rew_integral = -self._orient_error_integral**2 * self._rew_scales["r_orient_integral"]
-
-        # Calculate rew_orient_diff
-        rew_orient_diff = (self._last_orient_error - orient_error) / self._dt * 0
-
-        # Calculate rew_{base_acc}
-        root_velocities = self._olympusses.get_velocities(clone=False)
-        velocity = root_velocities[:, 0:3]
-        rew_base_acc = (
-            -torch.norm((velocity - self.last_vel) / (self._dt * self._controlFrequencyInv), dim=1) ** 2
-            * self._rew_scales["r_base_acc"]
-        )
-
-        # Calculate rew_{action_clip}
-        rew_action_clip = (
-            -torch.norm(self.current_policy_targets - self.current_clamped_targets, dim=1) ** 2
-            * self._rew_scales["r_action_clip"]
-        )
-
-
-        # Calculate rew_{torque_clip}
-        motor_joint_pos = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
-        motor_joint_vel = self._olympusses.get_joint_velocities(clone=False, joint_indices=self.actuated_idx)
-        commanded_torques = self._Kp * (self.current_policy_targets - motor_joint_pos) - self._Kd * motor_joint_vel
-        applied_torques = commanded_torques.clamp(-self._max_torque, self._max_torque)
-        rew_torque_clip = (
-            -torch.norm(commanded_torques - applied_torques, dim=1) ** 2 * self._rew_scales["r_torque_clip"]
-        )
-
-        # calculate rew_{joint_acc}
-        joint_acc = (motor_joint_vel - self.last_motor_joint_vel) / (self._dt * self._controlFrequencyInv)
-        rew_joint_acc = -torch.norm(joint_acc, dim=1) ** 2 * self._rew_scales["r_joint_acc"]
-
-        # Calculate rew_{velocity}
-        rew_velocity = (
-            -torch.norm(motor_joint_vel, dim = -1) **2 * self._rew_scales["r_velocity"] 
-        )
-
-        # Calculate rew_{change_dir}
-        sign = motor_joint_vel*self._joint_vel_old
-        changed_dir_mask = sign < -0.05
-        rew_change_dir = - changed_dir_mask.float().sum(dim=-1) * self._rew_scales["r_change_dir"] * rew_orient *1.5
-        self._joint_vel_old = motor_joint_vel
-
-        # Calculate rew_{regularize}
-        rew_regularize = -torch.norm(applied_torques-self._joint_targets_old, dim=-1) * self._rew_scales["r_regularize"] * rew_orient * 1.5
-        self._joint_targets_old = applied_torques
-
-        # Calculate rew_{collision}
-        rew_collision = -self._collision_buff.clone().float() * self._rew_scales["r_collision"] 
-
-        # Calculate inside threshold reward
-        rew_innside_threshold = self._inside_threshold.clone().float() * self._rew_scales["r_inside_threshold"]
-
-        # Calculate rew_{is_done}
-        rew_is_done = torch.zeros_like(self._time_out, dtype=torch.float)
-        rew_is_done[self._time_out] = (torch.pi/2 - orient_error[self._time_out]) * self._rew_scales["r_is_done"]
-
-
-        # Calculate inside threshold reward
-        self._inside_threshold = (
-                torch.abs(quat_diff_rad(base_rotation, self._zero_rot)) < self._finished_orient_error_threshold
-            ).logical_and(self._time_out)
-        rew_innside_threshold = self._inside_threshold.clone().float() * self._rew_scales["r_inside_threshold"]
-
-
-        # Calculate total reward
-        total_reward = (
-            rew_orient
-            + rew_integral
-            + rew_base_acc
-            + rew_action_clip
-            + rew_torque_clip
-            + rew_collision
-            + rew_innside_threshold
-            + rew_is_done
-            + rew_orient_diff
-            + rew_velocity
-            + rew_change_dir
-            + rew_regularize
-            + rew_joint_acc
-        ) * self._rew_scales["total"]
-
-
-        # Add rewards to tensorboard log
-        self.extras["detailed_rewards/collision"] = rew_collision.sum()
-        self.extras["detailed_rewards/base_acc"] = rew_base_acc.sum()
-        self.extras["detailed_rewards/action_clip"] = rew_action_clip.sum()
-        self.extras["detailed_rewards/joint_acc"] = rew_joint_acc.sum()
-        self.extras["detailed_rewards/torque_clip"] = rew_torque_clip.sum()
-        self.extras["detailed_rewards/orient"] = rew_orient.sum()
-        self.extras["detailed_rewards/orient_integral"] = rew_integral.sum()
-        self.extras["detailed_rewards/orient_diff"] = rew_orient_diff.sum()
-        self.extras["detailed_rewards/inside_threshold"] = rew_innside_threshold.sum()
-        self.extras["detailed_rewards/is_done"] = rew_is_done.sum()
-        self.extras["detailed_rewards/velocity"] = rew_velocity.sum()
-        self.extras["detailed_rewards/regularize"] = rew_regularize.sum()
-        self.extras["detailed_rewards/change_dir"] = rew_change_dir.sum()
-        self.extras["detailed_rewards/total_reward"] = total_reward.sum()
-
-        # Save last values
-        self.last_actions = self.actions.clone()
-        self.last_motor_joint_vel = motor_joint_vel.clone()
-        self.last_vel = velocity.clone()
-        self._last_orient_error = orient_error.clone()
-
-        # Place total reward in buffer
-        self.rew_buf = total_reward.detach().clone()
-
-    def is_done(self) -> None:
-        # Get collisions
-        self._collision_buff = self._olympusses.is_collision()
-        # Get timeout
-        self._time_out = self.progress_buf >= self._max_episode_length - 1
-        # Get joint violations
-        motor_joint_pos = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
-        motor_joint_pos_clamped = self._clamp_joint_angels(motor_joint_pos)
-        motor_joint_violations = (torch.abs(motor_joint_pos - motor_joint_pos_clamped) > 1e-6).any(dim=1)
-        self._collision_buff = self._collision_buff.logical_or(motor_joint_violations)
-
-        # Combine resets
-        reset = self._time_out.logical_or(self._collision_buff)
-        
-        # Inside threshold
-        _, base_rotation = self._olympusses.get_world_poses(clone=False)
-        orient_error = torch.abs(quat_diff_rad(base_rotation, self._zero_rot))
-        self._inside_threshold = (orient_error < self._finished_orient_error_threshold).logical_and(self._time_out)
-        self.extras[f"progress/inside_threshold"] = self._inside_threshold.sum()
-
-        # Reset buf might already be set to 1 if nan values are detected
-        self.reset_buf = torch.logical_or(reset, self.reset_buf)
-
-    def post_physics_step(self):
-        """Processes RL required computations for observations, states, rewards, resets, and extras.
-            Also maintains progress buffer for tracking step count per environment.
-
-        Returns:
-            obs_buf(torch.Tensor): Tensor of observation data.
-            rew_buf(torch.Tensor): Tensor of rewards data.
-            reset_buf(torch.Tensor): Tensor of resets/dones data.
-            extras(dict): Dictionary of extras data.
-        """
-
-        self.progress_buf[:] += 1
-
-        if self._env._world.is_playing():
-            self.is_done()
-            self.calculate_metrics()
-            self.get_observations()
-            self.get_states()
-            self.get_extras()
-
-        return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
-
-    def _clamp_joint_angels(self, joint_targets):
-        joint_targets = joint_targets.clamp(
-            self._motor_joint_lower_targets_limits, self._motor_joint_upper_targets_limits
-        )
-
-        front_pos = joint_targets[:, self.front_transversal_indicies]
-        back_pos = joint_targets[:, self.back_transversal_indicies]
-
-        motor_joint_sum = (front_pos + back_pos) - self._max_transversal_motor_diff
-        clamp_mask = motor_joint_sum < 0
-        front_pos[clamp_mask] -= motor_joint_sum[clamp_mask] / 2
-        back_pos[clamp_mask] -= motor_joint_sum[clamp_mask] / 2
-
-        clamp_mask_wide = motor_joint_sum > self._max_transversal_motor_sum
-        front_pos[clamp_mask_wide] -= (motor_joint_sum[clamp_mask_wide] - self._max_transversal_motor_sum) / 2
-        back_pos[clamp_mask_wide] -= (motor_joint_sum[clamp_mask_wide] - self._max_transversal_motor_sum) / 2
-
-        joint_targets[:, self.front_transversal_indicies] = front_pos
-        joint_targets[:, self.back_transversal_indicies] = back_pos
-        return joint_targets
-
-    def _random_quaternion(self, n):
-        i,j,k = torch.rand(n,3, device=self._device).unbind(dim=-1)
-        x = torch.sqrt(1 - i) * torch.sin(2 * torch.pi * j)
-        y = torch.sqrt(1 - i) * torch.cos(2 * torch.pi * j)
-        z = torch.sqrt(i) * torch.sin(2 * torch.pi * k)
-        w = torch.sqrt(i) * torch.cos(2 * torch.pi * k)
-        return torch.stack((w,x,y,z), dim=-1)
 
 def linear_rescale(x, x_min, x_max):
     """Linearly rescales between min and max, when input is between 0 and 1"""
