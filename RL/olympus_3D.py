@@ -279,41 +279,7 @@ class OlympusTask(RLTask):
             self.get_extras()
 
         return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
-
     
-    def random_leg_positions(self, num_resets, env_ids):
-        front_transversal = torch.rand((num_resets * 4,), device=self._device)
-        front_transversal = linear_rescale(
-            front_transversal,
-            torch.tensor(5.0, device=self._device).deg2rad(),
-            torch.tensor(100.0, device=self._device).deg2rad(),
-        )
-
-        back_transversal = torch.rand((num_resets * 4,), device=self._device)
-        back_transversal = linear_rescale(
-            back_transversal,
-            torch.tensor(5.0, device=self._device).deg2rad(),
-            torch.tensor(100.0, device=self._device).deg2rad(),
-        )
-
-        knee_outer, knee_inner, _ = self._forward_kin._calculate_knee_angles(front_transversal, back_transversal)
-
-        lateral = torch.rand((num_resets * 4,), device=self._device)
-        lateral = linear_rescale(
-            lateral,
-            torch.tensor(-100.0, device=self._device).deg2rad(),
-            torch.tensor(10.0, device=self._device).deg2rad(),
-        )
-
-        dof_pos = self.default_articulated_joints_pos[env_ids]
-        dof_pos[:, self.actuated_lateral_idx] = lateral.reshape((num_resets, 4))
-        dof_pos[:, self.front_transversal_indicies] = front_transversal.reshape((num_resets, 4))
-        dof_pos[:, self.back_transversal_indicies] = back_transversal.reshape((num_resets, 4))
-        dof_pos[:, self._knee_outer_indicies] = knee_outer.reshape((num_resets, 4))
-        dof_pos[:, self._knee_inner_indicies] = knee_inner.reshape((num_resets, 4))
-
-        return dof_pos
-
     def reset_idx(self, env_ids):
         num_resets = len(env_ids)
         indices = env_ids.to(dtype=torch.int32)
@@ -322,7 +288,7 @@ class OlympusTask(RLTask):
         if self._cfg["test"]:
             dof_pos = self.default_articulated_joints_pos[env_ids]
         else:
-            dof_pos = self.random_leg_positions(num_resets, env_ids)
+            dof_pos = self._random_leg_positions(num_resets, env_ids)
         
         self._olympusses.set_joint_positions(dof_pos, indices)
 
@@ -355,8 +321,6 @@ class OlympusTask(RLTask):
         self.progress_buf[env_ids] = 0
         self.last_actions[env_ids] = 0.0
         self.last_motor_joint_vel[env_ids] = 0.0
-
-
 
     def calculate_metrics(self) -> None:
         # Read base rotation
@@ -545,6 +509,39 @@ class OlympusTask(RLTask):
         w = torch.sqrt(i) * torch.cos(2 * torch.pi * k)
         return torch.stack((w,x,y,z), dim=-1)
 
+    def _random_leg_positions(self, num_resets, env_ids):
+        front_transversal = torch.rand((num_resets * 4,), device=self._device)
+        front_transversal = linear_rescale(
+            front_transversal,
+            torch.tensor(5.0, device=self._device).deg2rad(),
+            torch.tensor(100.0, device=self._device).deg2rad(),
+        )
+
+        back_transversal = torch.rand((num_resets * 4,), device=self._device)
+        back_transversal = linear_rescale(
+            back_transversal,
+            torch.tensor(5.0, device=self._device).deg2rad(),
+            torch.tensor(100.0, device=self._device).deg2rad(),
+        )
+
+        knee_outer, knee_inner, _ = self._forward_kin._calculate_knee_angles(front_transversal, back_transversal)
+
+        lateral = torch.rand((num_resets * 4,), device=self._device)
+        lateral = linear_rescale(
+            lateral,
+            torch.tensor(-100.0, device=self._device).deg2rad(),
+            torch.tensor(10.0, device=self._device).deg2rad(),
+        )
+
+        dof_pos = self.default_articulated_joints_pos[env_ids]
+        dof_pos[:, self.actuated_lateral_idx] = lateral.reshape((num_resets, 4))
+        dof_pos[:, self.front_transversal_indicies] = front_transversal.reshape((num_resets, 4))
+        dof_pos[:, self.back_transversal_indicies] = back_transversal.reshape((num_resets, 4))
+        dof_pos[:, self._knee_outer_indicies] = knee_outer.reshape((num_resets, 4))
+        dof_pos[:, self._knee_inner_indicies] = knee_inner.reshape((num_resets, 4))
+
+        return dof_pos
+
     def post_reset(self):
         """ Called only once during initialisation to populate variables and initialise envs.
         """
@@ -657,8 +654,6 @@ class OlympusTask(RLTask):
         indices = torch.arange(self._olympusses.count, dtype=torch.int64, device=self._device)
         self.reset_idx(indices)
 
-
 def linear_rescale(x, x_min, x_max):
     """Linearly rescales between min and max, when input is between 0 and 1"""
     return x * (x_max - x_min) + x_min
-
