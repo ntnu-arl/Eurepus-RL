@@ -4,20 +4,19 @@ name: Olympus
 physics_engine: ${..physics_engine}
 
 env:
-  numEnvs: ${resolve_default:4096,${...num_envs}} #  16, 128, 1280, 2048, 4096
+  numEnvs: ${resolve_default:128,${...num_envs}} #  16, 128, 1280, 2048, 4096
   envSpacing: 4.  # [m]
 
   clipObservations: 1000.0
-
   clipActions: 1000.0
 
   controlFrequencyInv: 4 #old 2
 
-  baseInitState:
-    pos: [0.0, 0.0, 0.52] # x,y,z [m]
-    rot: [0.0, 0.0, 0.0, 1.0] # x,y,z,w [quat]
-    vLinear: [0.0, 0.0, 0.0]  # x,y,z [m/s]
-    vAngular: [0.0, 0.0, 0.0]  # x,y,z [rad/s]
+
+  RLSetup:
+      num_observations        : 31
+      num_actions             : 12
+      num_articulated_joints  : 20
 
   control:
     # PD Drive parameters:
@@ -50,27 +49,27 @@ env:
   
   # Joint limits
   jointLimits:
-    lateralMotor              : [-180, 20] # [-10, 150]  # [deg]
+    lateralMotor              : [-180, 20]  # [-10, 150]  # [deg]
     transversalMotor          : [-60, 180]  # [deg]
-    maxTransversalMotorDiff   : -10           # [deg]
+    maxTransversalMotorDiff   : -10         # [deg]
     maxTransversalMotorSum    : 220         # [deg]
     maxJointVelocity          : 1500.0      # [deg/s]
 
   learn:
-    # rewards    
-    rewardScale               : 1
-    rOrientRewardScale        : 2
-    rBaseAccRewardScale       : 0 #.0001 #0.01
-    rActionClipRewardScale    : 0.01 #0.33
-    rTorqueClipRewardScale    : 0.000001 #0.01 #0.33 #0.000001
-    rCollisionRewardScale     : 0 # Is multiplied with 1 (= "true") if collision is detected
-    rIsDoneRewardScale        : 100 #150
-    rInsideThresholdRewardScale: 1 # Is multiplied with 1 (= "true") if innside threshold when reset
-    rOrientIntegralRewardScale: 0 #0.001 #0.01 # 0.00001
-    rJointAccRewardScale      : 0 #0.000000001
-    rVelocity                 : 0.00002
-    rChangeDir                : 0.035 #0.03  
-    rRegularize               : 0.002 #0.001 
+    rewards:    
+      total                     : 1
+      r_orient                  : 2
+      r_base_acc                : 0
+      r_action_clip             : 0.01
+      r_torque_clip             : 0.000001
+      r_collision               : 0
+      r_is_done                 : 100
+      r_inside_threshold        : 1
+      r_orient_integral         : 0
+      r_joint_acc               : 0
+      r_velocity                : 0.00002
+      r_change_dir              : 0.035
+      r_regularize              : 0.002
 
     # Curriculum 
     cNumberOfLevels           : 1
