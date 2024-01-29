@@ -126,7 +126,7 @@ class OlympusTask(RLTask):
 
         olympus = Olympus(
             prim_path=self.default_zero_env_path + "/Olympus",
-            usd_path="/Olympus-ws/Olympus-USD/Olympus/v2/olympus_v2_reorient_instanceable.usd",
+            usd_path="/Olympus-ws/Olympus-USD/Olympus/Simplified/eurepus.usd",
             name="Olympus",
         )
 
@@ -142,16 +142,16 @@ class OlympusTask(RLTask):
             actuated_paths.append(f"MotorHousing_{quadrant}/FrontTransversalMotor_{quadrant}")
             actuated_paths.append(f"MotorHousing_{quadrant}/BackTransversalMotor_{quadrant}")
 
-        for actuated_path in actuated_paths:
-            set_drive(
-                f"{olympus.prim_path}/{actuated_path}",
-                "angular",
-                "position",
-                0,
-                0, #self._Kp,
-                0, #self._Kd,
-                self._max_torque,
-            )
+        # for actuated_path in actuated_paths:
+        #     set_drive(
+        #         f"{olympus.prim_path}/{actuated_path}",
+        #         "angular",
+        #         "position",
+        #         0,
+        #         0, #self._Kp,
+        #         0, #self._Kd,
+        #         self._max_torque,
+        #     )
 
         # Indexing of default joint angles
 
@@ -244,8 +244,8 @@ class OlympusTask(RLTask):
         # self._olympusses.set_joint_position_targets(self.current_clamped_targets, joint_indices=self.actuated_idx)
 
         # Set efforts directly
-        efforts = self._motor_controller(self.current_clamped_targets)
-        self._olympusses.set_joint_efforts(efforts, joint_indices=self.actuated_idx)
+        self._last_efforts = self._motor_controller(self.current_clamped_targets)
+        self._olympusses.set_joint_efforts(self._last_efforts, joint_indices=self.actuated_idx)
     
     def _motor_controller(self, targets):
         motor_poses = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
@@ -255,9 +255,13 @@ class OlympusTask(RLTask):
         efforts = self._Kp*errors - self._Kd*motor_vels
 
         a, b = self._torque_speed_coefficients
-        max_torque = torch.max(torch.min(a*motor_vels + b, torch.full_like(motor_vels, fill_value=self._max_torque)), torch.zeros_like(motor_vels))
-        efforts = efforts.clamp(-max_torque, max_torque)
+        if a != 0 and b != 0:
+            max_torque = torch.max(torch.min(a*motor_vels + b, torch.full_like(motor_vels, fill_value=self._max_torque)), torch.zeros_like(motor_vels))
+        else:
+            max_torque = torch.full_like(efforts, fill_value=self._max_torque)
+            max_torque[motor_vels.abs() < self._max_joint_vel] = 0.0
 
+        efforts = efforts.clamp(-max_torque, max_torque)
         return efforts 
 
     def pre_physics_step(self, action) -> None:
@@ -278,6 +282,15 @@ class OlympusTask(RLTask):
         # Apply the control action to the quadruped
         self.apply_control(action)
     
+    def pre_step(self, time_step_index: int, simulation_time: float) -> None:
+        """called before stepping the physics simulation.
+
+        Args:
+            time_step_index (int): [description]
+            simulation_time (float): [description]
+        """
+        self._olympusses.set_joint_efforts(self._last_efforts, joint_indices=self.actuated_idx)
+
     def post_physics_step(self):
         """ Processes RL required computations for observations, states, rewards, resets, and extras.
             Also maintains progress buffer for tracking step count per environment.
@@ -549,8 +562,8 @@ class OlympusTask(RLTask):
         lateral = torch.rand((num_resets * 4,), device=self._device)
         lateral = linear_rescale(
             lateral,
-            torch.tensor(-100.0, device=self._device).deg2rad(),
-            torch.tensor(10.0, device=self._device).deg2rad(),
+            torch.tensor(-10.0, device=self._device).deg2rad(),
+            torch.tensor(100.0, device=self._device).deg2rad(),
         )
 
         dof_pos = self.default_articulated_joints_pos[env_ids]
@@ -637,6 +650,8 @@ class OlympusTask(RLTask):
         self.initial_base_pos, self.initial_base_rot = self._olympusses.get_world_poses()
         self.current_policy_targets = self.default_actuated_joints_pos.clone()
 
+        self._last_efforts = torch.zeros((self._num_envs, self._num_actions), device=self._device)
+
         self.actions = torch.zeros(
             self._num_envs,
             self.num_actions,
@@ -673,6 +688,7 @@ class OlympusTask(RLTask):
         # Initialise envs
         indices = torch.arange(self._olympusses.count, dtype=torch.int64, device=self._device)
         self.reset_idx(indices)
+
 
 def linear_rescale(x, x_min, x_max):
     """Linearly rescales between min and max, when input is between 0 and 1"""

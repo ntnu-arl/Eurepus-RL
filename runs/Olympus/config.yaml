@@ -2,7 +2,7 @@ task:
   name: Olympus
   physics_engine: ${..physics_engine}
   env:
-    numEnvs: ${resolve_default:128,${...num_envs}}
+    numEnvs: ${resolve_default:4096,${...num_envs}}
     envSpacing: 4.0
     clipObservations: 1000.0
     clipActions: 1000.0
@@ -12,10 +12,12 @@ task:
       num_actions: 12
       num_articulated_joints: 20
     control:
-      stiffness: 85.0
-      damping: 2.0
+      stiffness: 5.0
+      damping: 0.2
+      torque_speed_coefficients:
+      - -1.90985931929
+      - 72
       max_torque: 24.8
-      actionScale: 13.5
     defaultJointAngles:
       LateralMotor_FL: 0.0
       LateralMotor_BR: 0.0
@@ -176,7 +178,7 @@ train:
       truncate_grads: true
       grad_norm: 10.0
       horizon_length: 60
-      minibatch_size: 384
+      minibatch_size: 49152
       mini_epochs: 15
       critic_coef: 2
       clip_value: false
@@ -193,7 +195,7 @@ task_name: ${task.name}
 experiment: ''
 RL_task: 3D
 num_envs: ''
-seed: 5293
+seed: 3605
 torch_deterministic: false
 max_iterations: ''
 physics_engine: physx
@@ -207,7 +209,7 @@ solver_type: 0
 test: false
 checkpoint: ''
 headless: true
-enable_livestream: false
+enable_livestream: true
 stream_type: webRTC
 mt_timeout: 30
 wandb_activate: false
