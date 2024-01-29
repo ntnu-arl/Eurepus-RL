@@ -259,7 +259,7 @@ class OlympusTask(RLTask):
             max_torque = torch.max(torch.min(a*motor_vels + b, torch.full_like(motor_vels, fill_value=self._max_torque)), torch.zeros_like(motor_vels))
         else:
             max_torque = torch.full_like(efforts, fill_value=self._max_torque)
-            max_torque[motor_vels.abs() < self._max_joint_vel] = 0.0
+            max_torque[motor_vels.abs() > self._max_joint_vel] = 0.0
 
         efforts = efforts.clamp(-max_torque, max_torque)
         return efforts 
