@@ -75,10 +75,13 @@ class OlympusTask(RLTask):
         # controller
         self._Kp = self._task_cfg["env"]["control"]["stiffness"]
         self._Kd = self._task_cfg["env"]["control"]["damping"]
-        self._max_torque = self._task_cfg["env"]["control"]["max_torque"]
-        self._max_joint_vel = self._task_cfg["env"]["jointLimits"]["maxJointVelocity"] * torch.pi / 180
         self._max_transversal_motor_diff = (self._task_cfg["env"]["jointLimits"]["maxTransversalMotorDiff"] * torch.pi / 180)
         self._max_transversal_motor_sum = (self._task_cfg["env"]["jointLimits"]["maxTransversalMotorSum"] * torch.pi / 180)
+
+        # motor characteristics
+        self._torque_speed_coefficients = self._task_cfg["env"]["control"]["torque_speed_coefficients"]
+        self._max_torque = self._task_cfg["env"]["control"]["max_torque"]
+        self._max_joint_vel = self._task_cfg["env"]["jointLimits"]["maxJointVelocity"] * torch.pi / 180
 
         # Initialise RL task
         RLTask.__init__(self, name, env)
@@ -145,8 +148,8 @@ class OlympusTask(RLTask):
                 "angular",
                 "position",
                 0,
-                self._Kp,
-                self._Kd,
+                0, #self._Kp,
+                0, #self._Kd,
                 self._max_torque,
             )
 
@@ -238,10 +241,27 @@ class OlympusTask(RLTask):
         self.current_clamped_targets = self._clamp_joint_angels(self.current_policy_targets)
 
         # Set targets
-        self._olympusses.set_joint_position_targets(self.current_clamped_targets, joint_indices=self.actuated_idx)
+        # self._olympusses.set_joint_position_targets(self.current_clamped_targets, joint_indices=self.actuated_idx)
+
+        # Set efforts directly
+        efforts = self._motor_controller(self.current_clamped_targets)
+        self._olympusses.set_joint_efforts(efforts, joint_indices=self.actuated_idx)
+    
+    def _motor_controller(self, targets):
+        motor_poses = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
+        motor_vels = self._olympusses.get_joint_velocities(clone=False, joint_indices=self.actuated_idx)
+        
+        errors = targets - motor_poses
+        efforts = self._Kp*errors - self._Kd*motor_vels
+
+        a, b = self._torque_speed_coefficients
+        max_torque = torch.max(torch.min(a*motor_vels + b, torch.full_like(motor_vels, fill_value=self._max_torque)), torch.zeros_like(motor_vels))
+        efforts = efforts.clamp(-max_torque, max_torque)
+
+        return efforts 
 
     def pre_physics_step(self, action) -> None:
-        """
+        """ 
         Prepares the quadruped for the next physics step.
         NB this has to be done before each call to world.step().
         """

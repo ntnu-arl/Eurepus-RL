@@ -4,7 +4,7 @@ name: Olympus
 physics_engine: ${..physics_engine}
 
 env:
-  numEnvs: ${resolve_default:128,${...num_envs}} #  16, 128, 1280, 2048, 4096
+  numEnvs: ${resolve_default:4096,${...num_envs}} #  16, 128, 1280, 2048, 4096
   envSpacing: 4.  # [m]
 
   clipObservations: 1000.0
@@ -20,10 +20,12 @@ env:
 
   control:
     # PD Drive parameters:
-    stiffness: 85.0  # [N*m/rad]
-    damping: 2.0     # [N*m*s/rad]
+    stiffness: 5.0  # [N*m/rad]
+    damping: 0.2     # [N*m*s/rad]
+
+    # Motor characteristics:
+    torque_speed_coefficients: [-1.90985931929, 72]
     max_torque: 24.8 # [N*m]
-    actionScale: 13.5
 
   defaultJointAngles:  # = target angles when action = 0.0
     LateralMotor_FL           : 0.00  # [rad]
