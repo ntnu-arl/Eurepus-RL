@@ -235,7 +235,7 @@ class OlympusTask(RLTask):
         new_targets = 0.5 * pos_target * (self._motor_joint_upper_targets_limits - self._motor_joint_lower_targets_limits).view(1, -1) \
                     + 0.5 * (self._motor_joint_upper_targets_limits + self._motor_joint_lower_targets_limits).view(1, -1)
         
-        interpol_coeff = torch.exp(-self._last_orient_error**2 / 0.001).unsqueeze(-1)
+        interpol_coeff = torch.zeros_like(new_targets) # torch.exp(-self._last_orient_error**2 / 0.001).unsqueeze(-1)
         self.current_policy_targets = (1 - interpol_coeff) * new_targets + interpol_coeff* self._olympusses.get_joint_positions(clone=True, joint_indices=self.actuated_idx)
 
         # clamp targets to avoid self collisions
@@ -445,19 +445,19 @@ class OlympusTask(RLTask):
 
 
         # Add rewards to tensorboard log
-        self.extras["detailed_rewards/collision"] = rew_collision.mean()
-        self.extras["detailed_rewards/base_acc"] = rew_base_acc.mean()
-        self.extras["detailed_rewards/action_clip"] = rew_action_clip.mean()
-        self.extras["detailed_rewards/joint_acc"] = rew_joint_acc.mean()
-        self.extras["detailed_rewards/torque_clip"] = rew_torque_clip.mean()
-        self.extras["detailed_rewards/orient"] = rew_orient.mean()
-        self.extras["detailed_rewards/orient_integral"] = rew_integral.mean()
-        self.extras["detailed_rewards/inside_threshold"] = rew_innside_threshold.mean()
-        self.extras["detailed_rewards/is_done"] = rew_is_done.mean()
-        self.extras["detailed_rewards/velocity"] = rew_velocity.mean()
-        self.extras["detailed_rewards/regularize"] = rew_regularize.mean()
-        self.extras["detailed_rewards/change_dir"] = rew_change_dir.mean()
-        self.extras["detailed_rewards/total_reward"] = total_reward.mean()
+        #self.extras["dr/collision"] = rew_collision.mean()
+        #self.extras["dr/base_acc"] = rew_base_acc.mean()
+        self.extras["dr/action_clip"] = rew_action_clip.mean()
+        #self.extras["dr/joint_acc"] = rew_joint_acc.mean()
+        self.extras["dr/torque_clip"] = rew_torque_clip.mean()
+        self.extras["dr/orient"] = rew_orient.mean()
+        #self.extras["dr/orient_integral"] = rew_integral.mean()
+        self.extras["dr/inside_threshold"] = rew_innside_threshold.mean()
+        self.extras["dr/is_done"] = rew_is_done.mean()
+        self.extras["dr/velocity"] = rew_velocity.mean()
+        self.extras["dr/regularize"] = rew_regularize.mean()
+        self.extras["dr/change_dir"] = rew_change_dir.mean()
+        self.extras["dr/total_reward"] = total_reward.mean()
 
         # Save last values
         self.last_actions = self.actions.clone()
