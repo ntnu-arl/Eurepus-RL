@@ -35,6 +35,7 @@ from omniisaacgymenvs.tasks.utils.usd_utils import set_drive
 
 from omni.isaac.core.utils.torch.rotations import (
     quat_rotate,
+    quat_rotate_inverse,
     quat_mul,
     get_euler_xyz,
     quat_diff_rad,
@@ -142,16 +143,16 @@ class OlympusTask(RLTask):
             actuated_paths.append(f"MotorHousing_{quadrant}/FrontTransversalMotor_{quadrant}")
             actuated_paths.append(f"MotorHousing_{quadrant}/BackTransversalMotor_{quadrant}")
 
-        # for actuated_path in actuated_paths:
-        #     set_drive(
-        #         f"{olympus.prim_path}/{actuated_path}",
-        #         "angular",
-        #         "position",
-        #         0,
-        #         0, #self._Kp,
-        #         0, #self._Kd,
-        #         self._max_torque,
-        #     )
+        for actuated_path in actuated_paths:
+            set_drive(
+                f"{olympus.prim_path}/{actuated_path}",
+                "angular",
+                "position",
+                0,
+                0, #self._Kp,
+                0, #self._Kd,
+                self._max_torque,
+            )
 
         # Indexing of default joint angles
 
@@ -570,8 +571,8 @@ class OlympusTask(RLTask):
         dof_pos[:, self.actuated_lateral_idx] = lateral.reshape((num_resets, 4))
         dof_pos[:, self.front_transversal_indicies] = front_transversal.reshape((num_resets, 4))
         dof_pos[:, self.back_transversal_indicies] = back_transversal.reshape((num_resets, 4))
-        dof_pos[:, self._knee_outer_indicies] = knee_outer.reshape((num_resets, 4))
-        dof_pos[:, self._knee_inner_indicies] = knee_inner.reshape((num_resets, 4))
+        dof_pos[:, self._knee_outer_indicies] = -knee_outer.reshape((num_resets, 4))
+        dof_pos[:, self._knee_inner_indicies] = -knee_inner.reshape((num_resets, 4))
 
         return dof_pos
 
