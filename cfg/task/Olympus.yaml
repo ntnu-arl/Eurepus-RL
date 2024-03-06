@@ -14,18 +14,18 @@ env:
 
 
   RLSetup:
-      num_observations        : 31
+      num_observations        : 16
       num_actions             : 12
       num_articulated_joints  : 20
 
   control:
     # PD Drive parameters:
-    stiffness: 0.5  # [N*m/rad]
-    damping: 0.02     # [N*m*s/rad]
+    stiffness: 1.8 # [N*m/rad]
+    damping: 0.04     # [N*m*s/rad]
 
     # Motor characteristics:
-    torque_speed_coefficients: [0, 0] #[-1.90985931929, 72]
-    max_torque: 0.2 # [N*m]
+    torque_speed_coefficients: [-0.05, 1.8] #[-1.90985931929, 72]
+    max_torque: 1.8 # [N*m]
 
   defaultJointAngles:  # = target angles when action = 0.0
     LateralMotor_FL           : 0.00  # [rad]
@@ -55,7 +55,7 @@ env:
     transversalMotor          : [-60, 180]  # [deg]
     maxTransversalMotorDiff   : -10         # [deg]
     maxTransversalMotorSum    : 220         # [deg]
-    maxJointVelocity          : 2178.0      # [deg/s]
+    maxJointVelocity          : 2000.0      # [deg/s]
 
   learn:
     rewards:    
@@ -84,7 +84,7 @@ env:
     rOrientRewardTemp         : 0.7 #0.3 #0.5
 
     # episode length in seconds
-    episodeLength_s: 3
+    episodeLength_s: 15
 
 sim:
   dt: 0.00208

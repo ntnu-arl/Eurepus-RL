@@ -70,6 +70,9 @@ class OlympusTask(RLTask):
         self._num_articulated_joints = self._task_cfg["env"]["RLSetup"]["num_articulated_joints"]
         self._rew_scales = self._task_cfg["env"]["learn"]["rewards"]
         
+        # Initialise RL task
+        RLTask.__init__(self, name, env)
+
         # default joint positions
         self._named_default_joint_angles = self._task_cfg["env"]["defaultJointAngles"]
 
@@ -78,15 +81,14 @@ class OlympusTask(RLTask):
         self._Kd = self._task_cfg["env"]["control"]["damping"]
         self._max_transversal_motor_diff = (self._task_cfg["env"]["jointLimits"]["maxTransversalMotorDiff"] * torch.pi / 180)
         self._max_transversal_motor_sum = (self._task_cfg["env"]["jointLimits"]["maxTransversalMotorSum"] * torch.pi / 180)
+        self._targets = torch.zeros((self._num_envs, self._num_actions), device=self._device)
+        self._velocity = torch.pi #[rad/s]
 
         # motor characteristics
         self._torque_speed_coefficients = self._task_cfg["env"]["control"]["torque_speed_coefficients"]
         self._max_torque = self._task_cfg["env"]["control"]["max_torque"]
         self._max_joint_vel = self._task_cfg["env"]["jointLimits"]["maxJointVelocity"] * torch.pi / 180
 
-        # Initialise RL task
-        RLTask.__init__(self, name, env)
-        
         # Define orientation error to be accepted as completed
         self._finished_orient_error_threshold = self._task_cfg["env"]["learn"]["angleErrorThreshold"] * torch.pi / 180
         self._inside_threshold = torch.zeros((self._num_envs,), device=self._device)
@@ -143,16 +145,16 @@ class OlympusTask(RLTask):
             actuated_paths.append(f"MotorHousing_{quadrant}/FrontTransversalMotor_{quadrant}")
             actuated_paths.append(f"MotorHousing_{quadrant}/BackTransversalMotor_{quadrant}")
 
-        for actuated_path in actuated_paths:
-            set_drive(
-                f"{olympus.prim_path}/{actuated_path}",
-                "angular",
-                "position",
-                0,
-                0, #self._Kp,
-                0, #self._Kd,
-                self._max_torque,
-            )
+        # for actuated_path in actuated_paths:
+        #     set_drive(
+        #         f"{olympus.prim_path}/{actuated_path}",
+        #         "angular",
+        #         "position",
+        #         0,
+        #         0, #self._Kp,
+        #         0, #self._Kd,
+        #         self._max_torque,
+        #     )
 
         # Indexing of default joint angles
 
@@ -210,9 +212,9 @@ class OlympusTask(RLTask):
         obs = torch.cat(
             (
                 motor_joint_pos,
-                motor_joint_vel,
-                base_rotation,
-                ang_velocity,
+                # motor_joint_vel,
+                base_rotation
+                # ang_velocity,
             ),
             dim=-1,
         )
@@ -241,11 +243,16 @@ class OlympusTask(RLTask):
         # clamp targets to avoid self collisions
         self.current_clamped_targets = self._clamp_joint_angels(self.current_policy_targets)
 
+        # Velocity controlled guidance module
+        motor_poses = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
+        self._targets[motor_poses < self.current_clamped_targets - 6*self._velocity*self._controlFrequencyInv*self._dt] += self._velocity*self._controlFrequencyInv*self._dt
+        self._targets[motor_poses > self.current_clamped_targets + 6*self._velocity*self._controlFrequencyInv*self._dt] -= self._velocity*self._controlFrequencyInv*self._dt
+
         # Set targets
         # self._olympusses.set_joint_position_targets(self.current_clamped_targets, joint_indices=self.actuated_idx)
 
         # Set efforts directly
-        self._last_efforts = self._motor_controller(self.current_clamped_targets)
+        self._last_efforts = self._motor_controller(self._targets)
         self._olympusses.set_joint_efforts(self._last_efforts, joint_indices=self.actuated_idx)
     
     def _motor_controller(self, targets):
