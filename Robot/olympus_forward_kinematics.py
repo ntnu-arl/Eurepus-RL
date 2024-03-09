@@ -13,16 +13,16 @@ class OlympusForwardKinematics(torch.jit.ScriptModule):
 
         # Frame positions
         self._front_motor_mhf = torch.tensor([0.0, 0.0, 0.0], device=self._device)
-        self._back_motor_mhf = torch.tensor([-0.05, 0.0, 0.0], device=self._device)
-        self._front_knee_fmf = torch.tensor([0.0, 0.0, -0.09], device=self._device)
-        self._back_knee_bmf = torch.tensor([0, 0, -0.09], device=self._device)
+        self._back_motor_mhf = torch.tensor([-0.03, 0.0, 0.0], device=self._device)
+        self._front_knee_fmf = torch.tensor([0.0, 0.0, -0.0912417842877], device=self._device)
+        self._back_knee_bmf = torch.tensor([0, 0, -0.0912417842877], device=self._device)
         self._paw_attachment_fkf = torch.tensor([0.0, 0.0, -0.15], device=self._device)
         self._paw_attachment_bkf = torch.tensor([0.0, 0.0, -0.15], device=self._device)
 
         # Initial rotations
         self._y_axis = torch.tensor([0.0, 1.0, 0.0], device=self._device)
-        self._fkf_init = 9.59 * torch.pi / 180
-        self._bkf_init = -9.59 * torch.pi / 180
+        self._fkf_init = 9 * torch.pi / 180
+        self._bkf_init = -9 * torch.pi / 180
 
     @torch.jit.script_method
     def get_squat_configuration(self, squat_angle: Tensor) -> Tuple[Tensor, Tensor, Tensor]:

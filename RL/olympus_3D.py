@@ -112,7 +112,7 @@ class OlympusTask(RLTask):
     def set_up_scene(self, scene) -> None:
         self.get_olympus()
         super().set_up_scene(scene, replicate_physics=False)
-        self._olympusses = OlympusView(prim_paths_expr="/World/envs/.*/Olympus/Body", name="olympusview")
+        self._olympusses = OlympusView(prim_paths_expr="/World/envs/.*/Eurepus/Body", name="olympusview")
 
         scene.add(self._olympusses)
         scene.add(self._olympusses._knees)
@@ -128,15 +128,15 @@ class OlympusTask(RLTask):
         # Configure olympus robot instance
 
         olympus = Olympus(
-            prim_path=self.default_zero_env_path + "/Olympus",
-            usd_path="/Olympus-ws/Olympus-USD/Olympus/Simplified/eurepus.usd",
-            name="Olympus",
+            prim_path=self.default_zero_env_path + "/Eurepus",
+            usd_path="/Olympus-ws/Olympus-USD/Eurepus/Eurepus_instanceable.usd",
+            name="Eurepus",
         )
 
         self._sim_config.apply_articulation_settings(
-            "Olympus",
+            "Eurepus",
             get_prim_at_path(olympus.prim_path),
-            self._sim_config.parse_actor_config("Olympus"),
+            self._sim_config.parse_actor_config("Eurepus"),
         )
 
         actuated_paths = []
@@ -151,8 +151,8 @@ class OlympusTask(RLTask):
         #         "angular",
         #         "position",
         #         0,
-        #         0, #self._Kp,
-        #         0, #self._Kd,
+        #         self._Kp,
+        #         self._Kd,
         #         self._max_torque,
         #     )
 
@@ -244,15 +244,15 @@ class OlympusTask(RLTask):
         self.current_clamped_targets = self._clamp_joint_angels(self.current_policy_targets)
 
         # Velocity controlled guidance module
-        motor_poses = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
-        self._targets[motor_poses < self.current_clamped_targets - 6*self._velocity*self._controlFrequencyInv*self._dt] += self._velocity*self._controlFrequencyInv*self._dt
-        self._targets[motor_poses > self.current_clamped_targets + 6*self._velocity*self._controlFrequencyInv*self._dt] -= self._velocity*self._controlFrequencyInv*self._dt
+        # motor_poses = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
+        # self._targets[motor_poses < self.current_clamped_targets - 6*self._velocity*self._controlFrequencyInv*self._dt] += self._velocity*self._controlFrequencyInv*self._dt
+        # self._targets[motor_poses > self.current_clamped_targets + 6*self._velocity*self._controlFrequencyInv*self._dt] -= self._velocity*self._controlFrequencyInv*self._dt
 
         # Set targets
         # self._olympusses.set_joint_position_targets(self.current_clamped_targets, joint_indices=self.actuated_idx)
 
         # Set efforts directly
-        self._last_efforts = self._motor_controller(self._targets)
+        self._last_efforts = self._motor_controller(self.current_clamped_targets)
         self._olympusses.set_joint_efforts(self._last_efforts, joint_indices=self.actuated_idx)
     
     def _motor_controller(self, targets):
@@ -330,6 +330,7 @@ class OlympusTask(RLTask):
             dof_pos = self.default_articulated_joints_pos[env_ids]
         else:
             dof_pos = self._random_leg_positions(num_resets, env_ids)
+
         
         self._olympusses.set_joint_positions(dof_pos, indices)
 
@@ -554,15 +555,15 @@ class OlympusTask(RLTask):
         front_transversal = torch.rand((num_resets * 4,), device=self._device)
         front_transversal = linear_rescale(
             front_transversal,
-            torch.tensor(5.0, device=self._device).deg2rad(),
-            torch.tensor(100.0, device=self._device).deg2rad(),
+            torch.tensor(5, device=self._device).deg2rad(),
+            torch.tensor(100, device=self._device).deg2rad(),
         )
 
         back_transversal = torch.rand((num_resets * 4,), device=self._device)
         back_transversal = linear_rescale(
             back_transversal,
-            torch.tensor(5.0, device=self._device).deg2rad(),
-            torch.tensor(100.0, device=self._device).deg2rad(),
+            torch.tensor(5, device=self._device).deg2rad(),
+            torch.tensor(100, device=self._device).deg2rad(),
         )
 
         knee_outer, knee_inner, _ = self._forward_kin._calculate_knee_angles(front_transversal, back_transversal)
@@ -578,8 +579,8 @@ class OlympusTask(RLTask):
         dof_pos[:, self.actuated_lateral_idx] = lateral.reshape((num_resets, 4))
         dof_pos[:, self.front_transversal_indicies] = front_transversal.reshape((num_resets, 4))
         dof_pos[:, self.back_transversal_indicies] = back_transversal.reshape((num_resets, 4))
-        dof_pos[:, self._knee_outer_indicies] = -knee_outer.reshape((num_resets, 4))
-        dof_pos[:, self._knee_inner_indicies] = -knee_inner.reshape((num_resets, 4))
+        dof_pos[:, self._knee_outer_indicies] = knee_outer.reshape((num_resets, 4))
+        dof_pos[:, self._knee_inner_indicies] = knee_inner.reshape((num_resets, 4))
 
         return dof_pos
 
@@ -696,7 +697,6 @@ class OlympusTask(RLTask):
         # Initialise envs
         indices = torch.arange(self._olympusses.count, dtype=torch.int64, device=self._device)
         self.reset_idx(indices)
-
 
 def linear_rescale(x, x_min, x_max):
     """Linearly rescales between min and max, when input is between 0 and 1"""

@@ -2,22 +2,22 @@ task:
   name: Olympus
   physics_engine: ${..physics_engine}
   env:
-    numEnvs: ${resolve_default:4096,${...num_envs}}
+    numEnvs: 16
     envSpacing: 4.0
     clipObservations: 1000.0
     clipActions: 1000.0
     controlFrequencyInv: 4
     RLSetup:
-      num_observations: 31
+      num_observations: 16
       num_actions: 12
       num_articulated_joints: 20
     control:
-      stiffness: 5.0
-      damping: 0.2
+      stiffness: 2
+      damping: 0.04
       torque_speed_coefficients:
-      - -1.90985931929
-      - 72
-      max_torque: 24.8
+      - -0.11
+      - 2
+      max_torque: 2
     defaultJointAngles:
       LateralMotor_FL: 0.0
       LateralMotor_BR: 0.0
@@ -41,14 +41,14 @@ task:
       BackKnee_BL: 0.0
     jointLimits:
       lateralMotor:
-      - -180
-      - 20
+      - -50
+      - 110
       transversalMotor:
-      - -60
-      - 180
-      maxTransversalMotorDiff: -10
+      - -20
+      - 140
+      maxTransversalMotorDiff: -1
       maxTransversalMotorSum: 220
-      maxJointVelocity: 1500.0
+      maxJointVelocity: 2000.0
     learn:
       rewards:
         total: 1
@@ -150,8 +150,8 @@ train:
           name: default
         regularizer:
           name: None
-    load_checkpoint: false
-    load_path: ''
+    load_checkpoint: ${if:${...checkpoint},True,False}
+    load_path: ${...checkpoint}
     config:
       name: ${resolve_default:Olympus,${....experiment}}
       full_experiment_name: ${.name}
@@ -178,7 +178,7 @@ train:
       truncate_grads: true
       grad_norm: 10.0
       horizon_length: 60
-      minibatch_size: 49152
+      minibatch_size: 960
       mini_epochs: 15
       critic_coef: 2
       clip_value: false
@@ -195,7 +195,7 @@ task_name: ${task.name}
 experiment: ''
 RL_task: 3D
 num_envs: ''
-seed: 3605
+seed: 9189
 torch_deterministic: false
 max_iterations: ''
 physics_engine: physx
@@ -206,8 +206,8 @@ rl_device: cuda:0
 multi_gpu: false
 num_threads: 4
 solver_type: 0
-test: false
-checkpoint: ''
+test: true
+checkpoint: /Olympus-ws/in-air-stabilization/runs/Olympus/nn/Olympus.pth
 headless: true
 enable_livestream: true
 stream_type: webRTC

@@ -20,12 +20,12 @@ env:
 
   control:
     # PD Drive parameters:
-    stiffness: 1.8 # [N*m/rad]
+    stiffness: 2 # [N*m/rad]
     damping: 0.04     # [N*m*s/rad]
 
     # Motor characteristics:
-    torque_speed_coefficients: [-0.05, 1.8] #[-1.90985931929, 72]
-    max_torque: 1.8 # [N*m]
+    torque_speed_coefficients: [-0.11, 2] #[-1.90985931929, 72]
+    max_torque: 2 # [N*m]
 
   defaultJointAngles:  # = target angles when action = 0.0
     LateralMotor_FL           : 0.00  # [rad]
@@ -51,9 +51,9 @@ env:
   
   # Joint limits
   jointLimits:
-    lateralMotor              : [-20, 180]  # [-10, 150]  # [deg]
-    transversalMotor          : [-60, 180]  # [deg]
-    maxTransversalMotorDiff   : -10         # [deg]
+    lateralMotor              : [-50, 110]  # [-10, 150]  # [deg]
+    transversalMotor          : [-20, 140]  # [deg]
+    maxTransversalMotorDiff   : -1        # [deg]
     maxTransversalMotorSum    : 220         # [deg]
     maxJointVelocity          : 2000.0      # [deg/s]
 
@@ -84,7 +84,7 @@ env:
     rOrientRewardTemp         : 0.7 #0.3 #0.5
 
     # episode length in seconds
-    episodeLength_s: 15
+    episodeLength_s: 3
 
 sim:
   dt: 0.00208
@@ -134,6 +134,7 @@ sim:
     # -1 to use default values
     override_usd_defaults: False
     enable_self_collisions: True
+    invert_collision_group_filter: True
     enable_gyroscopic_forces: True
     # also in stage params
     # per-actor
