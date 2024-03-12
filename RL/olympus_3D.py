@@ -145,16 +145,16 @@ class OlympusTask(RLTask):
             actuated_paths.append(f"MotorHousing_{quadrant}/FrontTransversalMotor_{quadrant}")
             actuated_paths.append(f"MotorHousing_{quadrant}/BackTransversalMotor_{quadrant}")
 
-        # for actuated_path in actuated_paths:
-        #     set_drive(
-        #         f"{olympus.prim_path}/{actuated_path}",
-        #         "angular",
-        #         "position",
-        #         0,
-        #         self._Kp,
-        #         self._Kd,
-        #         self._max_torque,
-        #     )
+        for actuated_path in actuated_paths:
+            set_drive(
+                f"{olympus.prim_path}/{actuated_path}",
+                "angular",
+                "position",
+                0,
+                0, # self._Kp,
+                0.001, #self._Kd,
+                100000000, #self._max_torque,
+            )
 
         # Indexing of default joint angles
 
@@ -228,7 +228,7 @@ class OlympusTask(RLTask):
 
     def apply_control(self, actions) -> None:
         """
-        Apply control signals to the quadropeds.
+        Apply control signals to the quadrupeds.
         """
         new_targets = actions.clone()
         pos_target = new_targets[:, :12]
@@ -237,7 +237,7 @@ class OlympusTask(RLTask):
         new_targets = 0.5 * pos_target * (self._motor_joint_upper_targets_limits - self._motor_joint_lower_targets_limits).view(1, -1) \
                     + 0.5 * (self._motor_joint_upper_targets_limits + self._motor_joint_lower_targets_limits).view(1, -1)
         
-        interpol_coeff = torch.zeros_like(new_targets) # torch.exp(-self._last_orient_error**2 / 0.001).unsqueeze(-1)
+        interpol_coeff = torch.exp(-self._last_orient_error**2 / 0.001).unsqueeze(-1)
         self.current_policy_targets = (1 - interpol_coeff) * new_targets + interpol_coeff* self._olympusses.get_joint_positions(clone=True, joint_indices=self.actuated_idx)
 
         # clamp targets to avoid self collisions
@@ -348,7 +348,14 @@ class OlympusTask(RLTask):
         base_vel = torch.zeros((num_resets, 6), device=self._device)
         self._olympusses.set_velocities(base_vel, indices)
 
-        rand_rot = self._random_quaternion(num_resets)
+        # Eiter random quaternion
+        # rand_rot = self._random_quaternion(num_resets)
+
+        # Or random pitch only
+        rand_pitch = torch.rand(num_resets, device=self._device) * 2 * torch.pi
+        rand_rot = quat_from_euler_xyz(torch.zeros(num_resets, device=self._device), rand_pitch, torch.zeros(num_resets, device=self._device))
+
+        # Reset base orientation
         self._olympusses.set_world_poses(
             self.initial_base_pos[env_ids].clone(),
             rand_rot,
@@ -589,7 +596,7 @@ class OlympusTask(RLTask):
         """
         self.actuated_name2idx = {}
         for i, name in enumerate(self._olympusses.dof_names):
-            if "Knee" not in name:
+            if ("Knee" not in name) and ("Fixed" not in name):
                 self.actuated_name2idx[name] = i
 
         self.actuated_transversal_name2idx = {}

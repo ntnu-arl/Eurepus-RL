@@ -12,7 +12,7 @@ task:
       num_actions: 12
       num_articulated_joints: 20
     control:
-      stiffness: 2
+      stiffness: 10
       damping: 0.04
       torque_speed_coefficients:
       - -0.11
@@ -112,6 +112,7 @@ task:
     Olympus:
       override_usd_defaults: false
       enable_self_collisions: true
+      invert_collision_group_filter: true
       enable_gyroscopic_forces: true
       solver_position_iteration_count: 4
       solver_velocity_iteration_count: 1
@@ -195,7 +196,7 @@ task_name: ${task.name}
 experiment: ''
 RL_task: 3D
 num_envs: ''
-seed: 9189
+seed: 1131
 torch_deterministic: false
 max_iterations: ''
 physics_engine: physx
