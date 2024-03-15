@@ -21,8 +21,8 @@ class OlympusForwardKinematics(torch.jit.ScriptModule):
 
         # Initial rotations
         self._y_axis = torch.tensor([0.0, 1.0, 0.0], device=self._device)
-        self._fkf_init = 9 * torch.pi / 180
-        self._bkf_init = -9 * torch.pi / 180
+        self._fkf_init = 25 * torch.pi / 180
+        self._bkf_init = -25 * torch.pi / 180
 
     @torch.jit.script_method
     def get_squat_configuration(self, squat_angle: Tensor) -> Tuple[Tensor, Tensor, Tensor]:

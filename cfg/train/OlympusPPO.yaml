@@ -33,6 +33,11 @@ params: # Docs: https://github.com/Denys88/rl_games#config-parameters
       regularizer:
         name: None
 
+    # rnn:
+    #   units: 64
+    #   name: lstm
+    #   layers: 1
+
   load_checkpoint: ${if:${...checkpoint},True,False} # flag which sets whether to load the checkpoint
   load_path: ${...checkpoint} # path to the checkpoint to load
 
@@ -68,7 +73,7 @@ params: # Docs: https://github.com/Denys88/rl_games#config-parameters
     critic_coef: 2
     clip_value: False 
     clip_actions: True
-    seq_len: 4 # only for rnn
+    seq_length: 4 # only for rnn
     bound_loss_type: bound # regularisation or bound
     bounds_loss_coef: 0.01
     max_epochs: ${resolve_default:3000,${....max_iterations}}

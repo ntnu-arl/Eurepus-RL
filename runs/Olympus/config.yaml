@@ -2,15 +2,15 @@ task:
   name: Olympus
   physics_engine: ${..physics_engine}
   env:
-    numEnvs: 16
+    numEnvs: ${resolve_default:4096,${...num_envs}}
     envSpacing: 4.0
     clipObservations: 1000.0
     clipActions: 1000.0
     controlFrequencyInv: 4
     RLSetup:
-      num_observations: 16
-      num_actions: 12
-      num_articulated_joints: 20
+      num_observations: 9
+      num_actions: 8
+      num_articulated_joints: 21
     control:
       stiffness: 10
       damping: 0.04
@@ -39,6 +39,7 @@ task:
       BackKnee_FL: 0.0
       BackKnee_BR: 0.0
       BackKnee_BL: 0.0
+      PoleJoint: 0.0
     jointLimits:
       lateralMotor:
       - -50
@@ -151,8 +152,8 @@ train:
           name: default
         regularizer:
           name: None
-    load_checkpoint: ${if:${...checkpoint},True,False}
-    load_path: ${...checkpoint}
+    load_checkpoint: false
+    load_path: ''
     config:
       name: ${resolve_default:Olympus,${....experiment}}
       full_experiment_name: ${.name}
@@ -179,12 +180,12 @@ train:
       truncate_grads: true
       grad_norm: 10.0
       horizon_length: 60
-      minibatch_size: 960
+      minibatch_size: 49152
       mini_epochs: 15
       critic_coef: 2
       clip_value: false
       clip_actions: true
-      seq_len: 4
+      seq_length: 4
       bound_loss_type: bound
       bounds_loss_coef: 0.01
       max_epochs: ${resolve_default:3000,${....max_iterations}}
@@ -196,7 +197,7 @@ task_name: ${task.name}
 experiment: ''
 RL_task: 3D
 num_envs: ''
-seed: 1131
+seed: 5296
 torch_deterministic: false
 max_iterations: ''
 physics_engine: physx
@@ -207,10 +208,10 @@ rl_device: cuda:0
 multi_gpu: false
 num_threads: 4
 solver_type: 0
-test: true
-checkpoint: /Olympus-ws/in-air-stabilization/runs/Olympus/nn/Olympus.pth
+test: false
+checkpoint: ''
 headless: true
-enable_livestream: true
+enable_livestream: false
 stream_type: webRTC
 mt_timeout: 30
 wandb_activate: false

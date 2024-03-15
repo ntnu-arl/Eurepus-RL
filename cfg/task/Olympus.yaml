@@ -14,9 +14,9 @@ env:
 
 
   RLSetup:
-      num_observations        : 16
-      num_actions             : 12
-      num_articulated_joints  : 20
+      num_observations        : 9
+      num_actions             : 8
+      num_articulated_joints  : 21
 
   control:
     # PD Drive parameters:
@@ -48,6 +48,7 @@ env:
     BackKnee_FL               : 0.00  # [rad]
     BackKnee_BR               : 0.00  # [rad]
     BackKnee_BL               : 0.00  # [rad]
+    PoleJoint                 : 0.00  # [rad]
   
   # Joint limits
   jointLimits:

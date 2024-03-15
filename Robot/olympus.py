@@ -85,6 +85,7 @@ class Olympus(Robot):
             "BackKnee_FL",
             "BackKnee_BR",
             "BackKnee_BL",
+            "PoleJoint",
         ]
 
     @property
