@@ -82,7 +82,7 @@ class OlympusTask(RLTask):
         self._max_transversal_motor_diff = (self._task_cfg["env"]["jointLimits"]["maxTransversalMotorDiff"] * torch.pi / 180)
         self._max_transversal_motor_sum = (self._task_cfg["env"]["jointLimits"]["maxTransversalMotorSum"] * torch.pi / 180)
         self._targets = torch.zeros((self._num_envs, self._num_actions), device=self._device)
-        self._velocity = torch.pi #[rad/s]
+        self._velocity = 150 * torch.pi/180  #[rad/s]
 
         # motor characteristics
         self._torque_speed_coefficients = self._task_cfg["env"]["control"]["torque_speed_coefficients"]
@@ -244,15 +244,22 @@ class OlympusTask(RLTask):
         self.current_clamped_targets = self._clamp_joint_angels(self.current_policy_targets)
 
         # Velocity controlled guidance module
-        # motor_poses = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
-        # self._targets[motor_poses < self.current_clamped_targets - 6*self._velocity*self._controlFrequencyInv*self._dt] += self._velocity*self._controlFrequencyInv*self._dt
-        # self._targets[motor_poses > self.current_clamped_targets + 6*self._velocity*self._controlFrequencyInv*self._dt] -= self._velocity*self._controlFrequencyInv*self._dt
+        motor_poses = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
+
+        below_target_mask = motor_poses < self.current_clamped_targets - self._velocity*self._controlFrequencyInv*self._dt
+        above_target_mask = motor_poses > self.current_clamped_targets + self._velocity*self._controlFrequencyInv*self._dt
+
+        self._targets[below_target_mask] = motor_poses[below_target_mask] + self._velocity*self._controlFrequencyInv*self._dt
+        self._targets[above_target_mask] = motor_poses[above_target_mask] - self._velocity*self._controlFrequencyInv*self._dt
+
+        # self._targets[motor_poses < self.current_clamped_targets - self._velocity*self._controlFrequencyInv*self._dt] += self._velocity*self._controlFrequencyInv*self._dt
+        # self._targets[motor_poses > self.current_clamped_targets + self._velocity*self._controlFrequencyInv*self._dt] -= self._velocity*self._controlFrequencyInv*self._dt
 
         # Set targets
         # self._olympusses.set_joint_position_targets(self.current_clamped_targets, joint_indices=self.actuated_idx)
 
         # Set efforts directly
-        self._last_efforts = self._motor_controller(self.current_clamped_targets)
+        self._last_efforts = self._motor_controller(self._targets)
         self._olympusses.set_joint_efforts(self._last_efforts, joint_indices=self.actuated_idx)
     
     def _motor_controller(self, targets):
@@ -340,6 +347,7 @@ class OlympusTask(RLTask):
 
         # Reset motor targets
         self.current_policy_targets[env_ids] = dof_pos[:, self.actuated_idx]
+        self._targets[indices] = dof_pos[:, self.actuated_idx]
         self._olympusses.set_joint_position_targets(
             self.current_policy_targets[env_ids], indices=env_ids, joint_indices=self.actuated_idx
         )
@@ -349,11 +357,11 @@ class OlympusTask(RLTask):
         self._olympusses.set_velocities(base_vel, indices)
 
         # Eiter random quaternion
-        # rand_rot = self._random_quaternion(num_resets)
+        rand_rot = self._random_quaternion(num_resets)
 
         # Or random pitch only
-        rand_pitch = torch.rand(num_resets, device=self._device) * 2 * torch.pi
-        rand_rot = quat_from_euler_xyz(torch.zeros(num_resets, device=self._device), rand_pitch, torch.zeros(num_resets, device=self._device))
+        # rand_pitch = torch.rand(num_resets, device=self._device) * 2 * torch.pi
+        # rand_rot = quat_from_euler_xyz(torch.zeros(num_resets, device=self._device), rand_pitch, torch.zeros(num_resets, device=self._device))
 
         # Reset base orientation
         self._olympusses.set_world_poses(
