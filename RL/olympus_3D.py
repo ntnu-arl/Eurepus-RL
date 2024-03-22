@@ -82,6 +82,7 @@ class OlympusTask(RLTask):
         self._max_transversal_motor_diff = (self._task_cfg["env"]["jointLimits"]["maxTransversalMotorDiff"] * torch.pi / 180)
         self._max_transversal_motor_sum = (self._task_cfg["env"]["jointLimits"]["maxTransversalMotorSum"] * torch.pi / 180)
         self._max_velocity = torch.pi #[rad/s]
+        self._velocity = 150 * torch.pi/180  #[rad/s]
 
         # motor characteristics
         self._torque_speed_coefficients = self._task_cfg["env"]["control"]["torque_speed_coefficients"]
@@ -145,15 +146,27 @@ class OlympusTask(RLTask):
             actuated_paths.append(f"MotorHousing_{quadrant}/BackTransversalMotor_{quadrant}")
 
         for actuated_path in actuated_paths:
-            set_drive(
-                f"{olympus.prim_path}/{actuated_path}",
-                "angular",
-                "position",
-                0,
-                0, # self._Kp,
-                0.001, #self._Kd,
-                100000000, #self._max_torque,
-            )
+            if "Lateral" in actuated_path:
+                set_drive(
+                    f"{olympus.prim_path}/{actuated_path}",
+                    "angular",
+                    "position",
+                    0,
+                    self._Kp,
+                    self._Kd, 
+                    self._max_torque,
+                )
+
+            else:
+                set_drive(
+                    f"{olympus.prim_path}/{actuated_path}",
+                    "angular",
+                    "position",
+                    0,
+                    0, #self._Kp,
+                    0.01, #self._Kd, 
+                    1000000 #self._max_torque,
+                )
 
         # Indexing of default joint angles
 
@@ -255,16 +268,11 @@ class OlympusTask(RLTask):
         self.current_clamped_targets[:,:4] = torch.zeros_like(self.current_clamped_targets[:,:4])
 
         # Velocity controlled guidance module
-        # motor_poses = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
-        # self._targets[motor_poses < self.current_clamped_targets - 6*self._velocity*self._controlFrequencyInv*self._dt] += self._velocity*self._controlFrequencyInv*self._dt
-        # self._targets[motor_poses > self.current_clamped_targets + 6*self._velocity*self._controlFrequencyInv*self._dt] -= self._velocity*self._controlFrequencyInv*self._dt
-
-        # Set targets
-        # self._olympusses.set_joint_position_targets(self.current_clamped_targets, joint_indices=self.actuated_idx)
+        self.velocity_controlled_guidance_module()
 
         # Set efforts directly
-        self._last_efforts = self._motor_controller(self.current_clamped_targets)
-        self._olympusses.set_joint_efforts(self._last_efforts, joint_indices=self.actuated_idx)
+        self._last_efforts = self._motor_controller(self._targets)
+        self._olympusses.set_joint_efforts(self._last_efforts[:,4:], joint_indices=self.actuated_transversal_idx)
     
     def _motor_controller(self, targets):
         motor_poses = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
@@ -282,6 +290,21 @@ class OlympusTask(RLTask):
 
         efforts = efforts.clamp(-max_torque, max_torque)
         return efforts 
+
+    def velocity_controlled_guidance_module(self):
+        motor_poses = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
+        velocity_dt = self._velocity * self._dt
+        condition_1 = motor_poses < self.current_clamped_targets - velocity_dt
+        condition_2 = motor_poses > self.current_clamped_targets + velocity_dt
+
+        self._targets[condition_1] += velocity_dt
+        self._targets[condition_2] -= velocity_dt
+
+        condition_3 = abs(motor_poses - self.current_clamped_targets) < velocity_dt
+        self._targets[condition_3] = self.current_clamped_targets[condition_3]
+
+        self._targets[:, :4] = torch.zeros_like(self._targets[:, :4])
+
 
     def pre_physics_step(self, action) -> None:
         """ 
@@ -308,7 +331,10 @@ class OlympusTask(RLTask):
             time_step_index (int): [description]
             simulation_time (float): [description]
         """
-        self._olympusses.set_joint_efforts(self._last_efforts, joint_indices=self.actuated_idx)
+
+        self.velocity_controlled_guidance_module()
+        self._last_efforts = self._motor_controller(self._targets)
+        self._olympusses.set_joint_efforts(self._last_efforts[:,4:], joint_indices=self.actuated_transversal_idx)
 
     def post_physics_step(self):
         """ Processes RL required computations for observations, states, rewards, resets, and extras.
@@ -337,12 +363,12 @@ class OlympusTask(RLTask):
         indices = env_ids.to(dtype=torch.int32)
         
         # Reset joint positions
-        if self._cfg["test"]:
-            dof_pos = self.default_articulated_joints_pos[env_ids]  
-        else:
-            dof_pos = self._random_leg_positions(num_resets, env_ids)
+        # if self._cfg["test"]:
+        dof_pos = self.default_articulated_joints_pos[env_ids]  
+        # else:
+        # dof_pos = self._random_leg_positions(num_resets, env_ids)
 
-        pole_pos = torch.rand(num_resets, device=self._device) * 2 * torch.pi
+        pole_pos = torch.rand(num_resets, device=self._device) * 2 * torch.pi - torch.pi
         dof_pos[:, 0] = pole_pos
             
         self._olympusses.set_joint_positions(dof_pos, indices)
@@ -353,6 +379,7 @@ class OlympusTask(RLTask):
 
         # Reset motor targets
         self.current_policy_targets[env_ids] = dof_pos[:, self.actuated_idx]
+        self._targets[indices] = dof_pos[:, self.actuated_idx]
         self._olympusses.set_joint_position_targets(
             self.current_policy_targets[env_ids], indices=env_ids, joint_indices=self.actuated_idx
         )
@@ -457,7 +484,7 @@ class OlympusTask(RLTask):
 
 
         # Add rewards to tensorboard log
-        #self.extras["dr/collision"] = rew_collision.mean()
+        # self.extras["dr/collision"] = rew_collision.mean()
         #self.extras["dr/base_acc"] = rew_base_acc.mean()
         self.extras["dr/action_clip"] = rew_action_clip.mean()
         #self.extras["dr/joint_acc"] = rew_joint_acc.mean()
@@ -565,14 +592,14 @@ class OlympusTask(RLTask):
         front_transversal = linear_rescale(
             front_transversal,
             torch.tensor([0], device=self._device).deg2rad(),
-            torch.tensor([140], device=self._device).deg2rad(),
+            torch.tensor([130], device=self._device).deg2rad(),
         )
 
         back_transversal = torch.rand((num_resets * 4,), device=self._device)
         back_transversal = linear_rescale(
             back_transversal,
             torch.tensor([0], device=self._device).deg2rad(),
-            torch.tensor([140], device=self._device).deg2rad(),
+            torch.tensor([130], device=self._device).deg2rad(),
         )
 
         front_transversal, back_transversal = self._clamp_transversal_angles(front_transversal, back_transversal)
@@ -580,11 +607,11 @@ class OlympusTask(RLTask):
         knee_outer, knee_inner, _ = self._forward_kin._calculate_knee_angles(front_transversal, back_transversal)
 
         lateral = torch.zeros((num_resets * 4,), device=self._device)
-        lateral = linear_rescale(
-            lateral,
-            torch.tensor(-10.0, device=self._device).deg2rad(),
-            torch.tensor(100.0, device=self._device).deg2rad(),
-        )
+        # lateral = linear_rescale(
+        #     lateral,
+        #     torch.tensor(-10.0, device=self._device).deg2rad(),
+        #     torch.tensor(100.0, device=self._device).deg2rad(),
+        # )
 
         dof_pos = self.default_articulated_joints_pos[env_ids]
         dof_pos[:, self.actuated_lateral_idx] = lateral.reshape((num_resets, 4))
@@ -671,6 +698,8 @@ class OlympusTask(RLTask):
         self.current_policy_targets = self.default_actuated_joints_pos.clone()
 
         self._last_efforts = torch.zeros((self._num_envs, self._num_actuated), device=self._device)
+
+        self._targets = torch.zeros((self._num_envs, self._num_actuated), device=self._device)
 
         self.actions = torch.zeros(
             self._num_envs,

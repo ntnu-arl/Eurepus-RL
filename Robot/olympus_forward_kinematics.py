@@ -41,6 +41,8 @@ class OlympusForwardKinematics(torch.jit.ScriptModule):
 
     @torch.jit.script_method
     def _calculate_knee_angles(self, q_front: Tensor, q_back: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
+        q_front += 20*torch.pi/180
+        q_back += 20*torch.pi/180
         rot_fmf = self._rotation_matrix_y(-q_front)
         rot_bmf = self._rotation_matrix_y(q_back)
         front_knee_mhf = self._front_motor_mhf + self._transform_point(rot_fmf, self._front_knee_fmf)
