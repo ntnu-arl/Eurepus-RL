@@ -129,7 +129,7 @@ class OlympusTask(RLTask):
 
         olympus = Olympus(
             prim_path=self.default_zero_env_path + "/Eurepus",
-            usd_path="/Olympus-ws/Olympus-USD/Eurepus/Eurepus_instanceable_pole_pitch.usd",
+            usd_path="/Olympus-ws/Olympus-USD/Eurepus/Eurepus_instanceable_pole_roll.usd",
             name="Eurepus",
         )
 
@@ -146,27 +146,27 @@ class OlympusTask(RLTask):
             actuated_paths.append(f"MotorHousing_{quadrant}/BackTransversalMotor_{quadrant}")
 
         for actuated_path in actuated_paths:
-            if "Lateral" in actuated_path:
-                set_drive(
-                    f"{olympus.prim_path}/{actuated_path}",
-                    "angular",
-                    "position",
-                    0,
-                    self._Kp,
-                    self._Kd, 
-                    self._max_torque,
-                )
+            # if "Lateral" in actuated_path:
+            #     set_drive(
+            #         f"{olympus.prim_path}/{actuated_path}",
+            #         "angular",
+            #         "position",
+            #         0,
+            #         self._Kp,
+            #         self._Kd, 
+            #         self._max_torque,
+            #     )
 
-            else:
-                set_drive(
-                    f"{olympus.prim_path}/{actuated_path}",
-                    "angular",
-                    "position",
-                    0,
-                    0, #self._Kp,
-                    0.01, #self._Kd, 
-                    1000000 #self._max_torque,
-                )
+            # else:
+            set_drive(
+                f"{olympus.prim_path}/{actuated_path}",
+                "angular",
+                "position",
+                0,
+                0, #self._Kp,
+                0.01, #self._Kd, 
+                1000000 #self._max_torque,
+            )
 
         # Indexing of default joint angles
 
@@ -178,7 +178,7 @@ class OlympusTask(RLTask):
         )
 
         self.default_actuated_joints_pos = torch.zeros(
-            (self._num_envs, self._num_actions+4),  
+            (self._num_envs, self._num_actions),  
             dtype=torch.float,
             device=self.device,
             requires_grad=False,
@@ -203,8 +203,8 @@ class OlympusTask(RLTask):
 
     def get_observations(self) -> dict:
         # Read motor observations
-        motor_joint_pos = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_transversal_idx)
-        motor_joint_vel = self._olympusses.get_joint_velocities(clone=False, joint_indices=self.actuated_transversal_idx)
+        motor_joint_pos = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
+        motor_joint_vel = self._olympusses.get_joint_velocities(clone=False, joint_indices=self.actuated_idx)
 
         pole_pos = self._olympusses.get_joint_positions(clone=False, joint_indices=[0])
         pole_vel = self._olympusses.get_joint_velocities(clone=False, joint_indices=[0])
@@ -231,10 +231,10 @@ class OlympusTask(RLTask):
         obs = torch.cat(
             (
                 motor_joint_pos,
-                # motor_joint_vel,
+                motor_joint_vel,
                 #orient_error.view(-1, 1),
                 pole_pos,
-                # pole_vel,
+                pole_vel
                 # ang_velocity,
             ),
             dim=-1,
@@ -251,9 +251,9 @@ class OlympusTask(RLTask):
         """
         Apply control signals to the quadrupeds.
         """
-        transversal_targets = actions.clone()
-        lateral_targets = torch.zeros((self._num_envs, 4), device=self._device)
-        pos_target = torch.cat((lateral_targets, transversal_targets), dim=-1)
+        pos_target = actions.clone()
+        # lateral_targets = torch.zeros((self._num_envs, 4), device=self._device)
+        # pos_target = torch.cat((lateral_targets, transversal_targets), dim=-1)
         # pos_target = transversal_targets
 
         # lineraly interpolate between min and max
@@ -265,14 +265,13 @@ class OlympusTask(RLTask):
 
         # clamp targets to avoid self collisions
         self.current_clamped_targets = self._clamp_joint_angels(self.current_policy_targets)
-        self.current_clamped_targets[:,:4] = torch.zeros_like(self.current_clamped_targets[:,:4])
 
         # Velocity controlled guidance module
         self.velocity_controlled_guidance_module()
 
         # Set efforts directly
         self._last_efforts = self._motor_controller(self._targets)
-        self._olympusses.set_joint_efforts(self._last_efforts[:,4:], joint_indices=self.actuated_transversal_idx)
+        self._olympusses.set_joint_efforts(self._last_efforts, joint_indices=self.actuated_idx)
     
     def _motor_controller(self, targets):
         motor_poses = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
@@ -303,7 +302,7 @@ class OlympusTask(RLTask):
         condition_3 = abs(motor_poses - self.current_clamped_targets) < velocity_dt
         self._targets[condition_3] = self.current_clamped_targets[condition_3]
 
-        self._targets[:, :4] = torch.zeros_like(self._targets[:, :4])
+        # self._targets[:, :4] = torch.zeros_like(self._targets[:, :4])
 
 
     def pre_physics_step(self, action) -> None:
@@ -334,7 +333,7 @@ class OlympusTask(RLTask):
 
         self.velocity_controlled_guidance_module()
         self._last_efforts = self._motor_controller(self._targets)
-        self._olympusses.set_joint_efforts(self._last_efforts[:,4:], joint_indices=self.actuated_transversal_idx)
+        self._olympusses.set_joint_efforts(self._last_efforts, joint_indices=self.actuated_idx)
 
     def post_physics_step(self):
         """ Processes RL required computations for observations, states, rewards, resets, and extras.
@@ -728,7 +727,7 @@ class OlympusTask(RLTask):
         )
 
         self.joint_targets_old = torch.zeros(
-            [self._num_envs, self._num_actions+4], 
+            [self._num_envs, self._num_actions], 
             device=self._device
         )
 

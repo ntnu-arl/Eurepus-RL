@@ -14,13 +14,13 @@ env:
 
 
   RLSetup:
-      num_observations        : 9
-      num_actions             : 8
+      num_observations        : 26
+      num_actions             : 12
       num_articulated_joints  : 21
 
   control:
     # PD Drive parameters:
-    stiffness: 2 # [N*m/rad]
+    stiffness: 10 # [N*m/rad]
     damping: 0.04     # [N*m*s/rad]
 
     # Motor characteristics:
