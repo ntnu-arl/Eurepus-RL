@@ -28,11 +28,12 @@ env:
     max_torque: 2 # [N*m]
 
   defaultJointAngles:  # = target angles when action = 0.0
-    LateralMotor_FL           : 0.00  # [rad]
-    LateralMotor_BR           : 0.00  # [rad]
-    LateralMotor_BL           : 0.00  # [rad]
-    LateralMotor_FR           : 0.00  # [rad]
-    FrontTransversalMotor_FR  : 0.00  # [rad]
+    PoleJoint                 : 0.00  # [rad]
+    LateralMotor_FL           : 1.57  # [rad]
+    LateralMotor_BR           : 1.57  # [rad]
+    LateralMotor_BL           : 1.57  # [rad]
+    LateralMotor_FR           : 1.57  # [rad]
+    FrontTransversalMotor_FR  : 0.00 # [rad]
     FrontTransversalMotor_FL  : 0.00  # [rad]
     FrontTransversalMotor_BR  : 0.00  # [rad]
     FrontTransversalMotor_BL  : 0.00  # [rad]
@@ -48,7 +49,6 @@ env:
     BackKnee_FL               : 0.00  # [rad]
     BackKnee_BR               : 0.00  # [rad]
     BackKnee_BL               : 0.00  # [rad]
-    PoleJoint                 : 0.00  # [rad]
   
   # Joint limits
   jointLimits:

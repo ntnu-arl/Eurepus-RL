@@ -129,7 +129,7 @@ class OlympusTask(RLTask):
 
         olympus = Olympus(
             prim_path=self.default_zero_env_path + "/Eurepus",
-            usd_path="/Olympus-ws/Olympus-USD/Eurepus/Eurepus_instanceable_pole_pitch.usd",
+            usd_path="/Olympus-ws/Olympus-USD/Eurepus/Eurepus_instanceable_pole_yaw.usd",
             name="Eurepus",
         )
 
