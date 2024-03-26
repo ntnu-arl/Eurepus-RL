@@ -65,6 +65,7 @@ class Olympus(Robot):
         )
 
         self._dof_names = [
+            "PoleJoint",
             "LateralMotor_FL",
             "LateralMotor_BR",
             "LateralMotor_BL",
@@ -85,7 +86,6 @@ class Olympus(Robot):
             "BackKnee_FL",
             "BackKnee_BR",
             "BackKnee_BL",
-            "PoleJoint",
         ]
 
     @property
