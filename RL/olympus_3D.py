@@ -78,11 +78,14 @@ class OlympusTask(RLTask):
 
         # controller
         self._Kp = self._task_cfg["env"]["control"]["stiffness"]
+        self._Kp_rand = torch.ones(self._num_envs, 1, device=self._device) * self._Kp
         self._Kd = self._task_cfg["env"]["control"]["damping"]
+        self._Kd_rand = torch.ones(self._num_envs, 1, device=self._device) * self._Kd
         self._max_transversal_motor_diff = (self._task_cfg["env"]["jointLimits"]["maxTransversalMotorDiff"] * torch.pi / 180)
         self._max_transversal_motor_sum = (self._task_cfg["env"]["jointLimits"]["maxTransversalMotorSum"] * torch.pi / 180)
         self._max_velocity = torch.pi #[rad/s]
-        self._velocity = 150 * torch.pi/180  #[rad/s]
+        self._velocity = 300 * torch.pi/180  #[rad/s]
+        self._domain_rand_percentage = 1
 
         # motor characteristics
         self._torque_speed_coefficients = self._task_cfg["env"]["control"]["torque_speed_coefficients"]
@@ -231,10 +234,10 @@ class OlympusTask(RLTask):
         obs = torch.cat(
             (
                 motor_joint_pos,
-                # motor_joint_vel,
+                motor_joint_vel,
                 #orient_error.view(-1, 1),
                 pole_pos,
-                # pole_vel,
+                pole_vel,
                 # ang_velocity,
             ),
             dim=-1,
@@ -268,7 +271,8 @@ class OlympusTask(RLTask):
         self.current_clamped_targets[:,:4] = torch.zeros_like(self.current_clamped_targets[:,:4])
 
         # Velocity controlled guidance module
-        self.velocity_controlled_guidance_module()
+        # self.velocity_controlled_guidance_module()
+        self.low_pass_guidance_module()
 
         # Set efforts directly
         self._last_efforts = self._motor_controller(self._targets)
@@ -279,7 +283,7 @@ class OlympusTask(RLTask):
         motor_vels = self._olympusses.get_joint_velocities(clone=False, joint_indices=self.actuated_idx)
         
         errors = targets - motor_poses
-        efforts = self._Kp*errors - self._Kd*motor_vels
+        efforts = self._Kp_rand*errors - self._Kd_rand*motor_vels
 
         a, b = self._torque_speed_coefficients
         if a != 0 and b != 0:
@@ -304,6 +308,13 @@ class OlympusTask(RLTask):
         self._targets[condition_3] = self.current_clamped_targets[condition_3]
 
         self._targets[:, :4] = torch.zeros_like(self._targets[:, :4])
+
+    def low_pass_guidance_module(self):
+        self._targets = (1-self._dt*1.875)*self._old_targets + self._dt*1.875*self._old_clamped_targets
+        self._targets[:, :4] = torch.zeros_like(self._targets[:, :4])
+
+        self._old_clamped_targets = self.current_clamped_targets.clone()
+        self._old_targets = self._targets.clone()
 
 
     def pre_physics_step(self, action) -> None:
@@ -332,7 +343,8 @@ class OlympusTask(RLTask):
             simulation_time (float): [description]
         """
 
-        self.velocity_controlled_guidance_module()
+        # self.velocity_controlled_guidance_module()
+        self.low_pass_guidance_module()
         self._last_efforts = self._motor_controller(self._targets)
         self._olympusses.set_joint_efforts(self._last_efforts[:,4:], joint_indices=self.actuated_transversal_idx)
 
@@ -380,9 +392,17 @@ class OlympusTask(RLTask):
         # Reset motor targets
         self.current_policy_targets[env_ids] = dof_pos[:, self.actuated_idx]
         self._targets[indices] = dof_pos[:, self.actuated_idx]
+        self._old_targets[indices] = dof_pos[:, self.actuated_idx]
+        self._old_clamped_targets[indices] = dof_pos[:, self.actuated_idx]
         self._olympusses.set_joint_position_targets(
             self.current_policy_targets[env_ids], indices=env_ids, joint_indices=self.actuated_idx
         )
+
+        # Domain randomisation control parameters
+        random_factors_Kp = (torch.rand(self._num_envs, 1, device=self._device) - 0.5)*2
+        random_factors_Kd = (torch.rand(self._num_envs, 1, device=self._device) - 0.5)*2
+        self._Kp_rand = self._Kp + self._Kp*random_factors_Kp * self._domain_rand_percentage
+        self._Kd_rand = self._Kd + self._Kd*random_factors_Kd * self._domain_rand_percentage
 
         # Reset base position and velocity
         base_vel = torch.zeros((num_resets, 6), device=self._device)
@@ -425,7 +445,7 @@ class OlympusTask(RLTask):
         # rew_{torque_clip}
         motor_joint_pos = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
         motor_joint_vel = self._olympusses.get_joint_velocities(clone=False, joint_indices=self.actuated_idx)
-        commanded_torques = self._Kp * (self.current_clamped_targets - motor_joint_pos) - self._Kd * motor_joint_vel
+        commanded_torques = self._Kp_rand * (self.current_clamped_targets - motor_joint_pos) - self._Kd_rand * motor_joint_vel
         applied_torques = commanded_torques.clamp(-self._max_torque, self._max_torque)
         rew_torque_clip = (
             -torch.norm(commanded_torques - applied_torques, dim=1) ** 2 * self._rew_scales["r_torque_clip"]
@@ -700,6 +720,8 @@ class OlympusTask(RLTask):
         self._last_efforts = torch.zeros((self._num_envs, self._num_actuated), device=self._device)
 
         self._targets = torch.zeros((self._num_envs, self._num_actuated), device=self._device)
+        self._old_targets = torch.zeros((self._num_envs, self._num_actuated), device=self._device)
+        self._old_clamped_targets = torch.zeros((self._num_envs, self._num_actuated), device=self._device)
 
         self.actions = torch.zeros(
             self._num_envs,
