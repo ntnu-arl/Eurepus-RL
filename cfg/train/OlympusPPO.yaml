@@ -78,7 +78,7 @@ params: # Docs: https://github.com/Denys88/rl_games#config-parameters
     bounds_loss_coef: 0.01
     max_epochs: ${resolve_default:2000,${....max_iterations}}
 
-    save_best_after: 50
+    save_best_after: 10
     score_to_win: 20000
     save_frequency: 50
     print_stats: True

@@ -20,8 +20,8 @@ env:
 
   control:
     # PD Drive parameters:
-    stiffness: 2.16 # [N*m/rad]
-    damping: 0.17     # [N*m*s/rad]
+    stiffness: 4.32 # [N*m/rad]
+    damping: 0.34     # [N*m*s/rad]
 
     # Motor characteristics:
     torque_speed_coefficients: [-0.11, 2] #[-1.90985931929, 72]

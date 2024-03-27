@@ -205,6 +205,34 @@ class OlympusView(ArticulationView):
             track_contact_forces=True,
             prepare_contact_sensors=True,
         )
+        self.Mass_BR = RigidPrimView(
+            prim_paths_expr="/World/envs/.*/Eurepus/Mass_BR",
+            name="Mass_BR",
+            reset_xform_properties=False,
+            track_contact_forces=True,
+            prepare_contact_sensors=True,
+        )
+        self.Mass_BL = RigidPrimView(
+            prim_paths_expr="/World/envs/.*/Eurepus/Mass_BL",
+            name="Mass_BL",
+            reset_xform_properties=False,
+            track_contact_forces=True,
+            prepare_contact_sensors=True,
+        )
+        self.Mass_FR = RigidPrimView(
+            prim_paths_expr="/World/envs/.*/Eurepus/Mass_FR",
+            name="Mass_FR",
+            reset_xform_properties=False,
+            track_contact_forces=True,
+            prepare_contact_sensors=True,
+        )
+        self.Mass_FL = RigidPrimView(
+            prim_paths_expr="/World/envs/.*/Eurepus/Mass_FL",
+            name="Mass_FL",
+            reset_xform_properties=False,
+            track_contact_forces=True,
+            prepare_contact_sensors=True,
+        )
 
         self.rigid_prims = [
             self.MotorHousing_FL,
@@ -227,6 +255,10 @@ class OlympusView(ArticulationView):
             self.BackMotor_BR,
             self.FrontKnee_BR,
             self.BackKnee_BR,
+            self.Mass_BR,
+            self.Mass_BL,
+            self.Mass_FR,
+            self.Mass_FL,
         ]
 
     def get_knee_transforms(self):
