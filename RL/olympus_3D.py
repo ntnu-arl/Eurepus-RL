@@ -87,7 +87,7 @@ class OlympusTask(RLTask):
         self._domain_rand_percentage = 0.5
 
         # guidance
-        self._max_velocity = 150 * torch.pi/180  #[rad/s]
+        self._max_velocity = 300 * torch.pi/180  #[rad/s]
         self._guidance_c = 1
         self._guidance_w = 30
 
