@@ -154,18 +154,6 @@ class OlympusTask(RLTask):
             actuated_paths.append(f"MotorHousing_{quadrant}/BackTransversalMotor_{quadrant}")
 
         for actuated_path in actuated_paths:
-            # if "Lateral" in actuated_path:
-            #     set_drive(
-            #         f"{olympus.prim_path}/{actuated_path}",
-            #         "angular",
-            #         "position",
-            #         0,
-            #         self._Kp,
-            #         self._Kd, 
-            #         self._max_torque,
-            #     )
-
-            # else:
             set_drive(
                 f"{olympus.prim_path}/{actuated_path}",
                 "angular",
@@ -240,10 +228,8 @@ class OlympusTask(RLTask):
             (
                 motor_joint_pos,
                 motor_joint_vel,
-                #orient_error.view(-1, 1),
                 pole_pos,
                 pole_vel
-                # ang_velocity,
             ),
             dim=-1,
         )
@@ -393,10 +379,10 @@ class OlympusTask(RLTask):
         indices = env_ids.to(dtype=torch.int32)
         
         # Reset joint positions
-        # if self._cfg["test"]:
-        dof_pos = self.default_articulated_joints_pos[env_ids]  
-        # else:
-        # dof_pos = self._random_leg_positions(num_resets, env_ids)
+        if self._cfg["test"]:
+            dof_pos = self.default_articulated_joints_pos[env_ids]  
+        else:
+            dof_pos = self._random_leg_positions(num_resets, env_ids)
 
         pole_pos = torch.rand(num_resets, device=self._device) * 2 * torch.pi - torch.pi
         dof_pos[:, 0] = pole_pos
@@ -626,41 +612,6 @@ class OlympusTask(RLTask):
         w = torch.sqrt(i) * torch.cos(2 * torch.pi * k)
         return torch.stack((w,x,y,z), dim=-1)
 
-    # def _random_leg_positions(self, num_resets, env_ids):
-    #     front_transversal = torch.rand((num_resets * 4,), device=self._device)
-    #     front_transversal = linear_rescale(
-    #         front_transversal,
-    #         torch.tensor([0], device=self._device).deg2rad(),
-    #         torch.tensor([130], device=self._device).deg2rad(),
-    #     )
-
-    #     back_transversal = torch.rand((num_resets * 4,), device=self._device)
-    #     back_transversal = linear_rescale(
-    #         back_transversal,
-    #         torch.tensor([0], device=self._device).deg2rad(),
-    #         torch.tensor([130], device=self._device).deg2rad(),
-    #     )
-
-    #     front_transversal, back_transversal = self._clamp_transversal_angles(front_transversal, back_transversal)
-
-    #     knee_outer, knee_inner, _ = self._forward_kin._calculate_knee_angles(front_transversal, back_transversal)
-
-    #     lateral = torch.zeros((num_resets * 4,), device=self._device)
-    #     # lateral = linear_rescale(
-    #     #     lateral,
-    #     #     torch.tensor(-10.0, device=self._device).deg2rad(),
-    #     #     torch.tensor(100.0, device=self._device).deg2rad(),
-    #     # )
-
-    #     dof_pos = self.default_articulated_joints_pos[env_ids]
-    #     dof_pos[:, self.actuated_lateral_idx] = lateral.reshape((num_resets, 4))
-    #     dof_pos[:, self.front_transversal_indicies] = front_transversal.reshape((num_resets, 4))
-    #     dof_pos[:, self.back_transversal_indicies] = back_transversal.reshape((num_resets, 4))
-    #     dof_pos[:, self._knee_outer_indicies] = knee_outer.reshape((num_resets, 4))
-    #     dof_pos[:, self._knee_inner_indicies] = knee_inner.reshape((num_resets, 4))
-
-    #     return dof_pos
-
     def _random_leg_positions(self, num_resets, env_ids):
         front_transversal = torch.rand((num_resets * 4,), device=self._device)
         front_transversal = linear_rescale(
@@ -683,7 +634,7 @@ class OlympusTask(RLTask):
         lateral = torch.rand((num_resets * 4,), device=self._device) #torch.zeros((num_resets * 4,), device=self._device)
         lateral = linear_rescale(
             lateral,
-            torch.tensor(70.0, device=self._device).deg2rad(),
+            torch.tensor(0.0, device=self._device).deg2rad(),
             torch.tensor(110.0, device=self._device).deg2rad(),
         )
 
