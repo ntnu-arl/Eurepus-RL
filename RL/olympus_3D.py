@@ -136,7 +136,7 @@ class OlympusTask(RLTask):
 
         olympus = Olympus(
             prim_path=self.default_zero_env_path + "/Eurepus",
-            usd_path="/Olympus-ws/Olympus-USD/Eurepus/Eurepus_instanceable_pole_pitch.usd",
+            usd_path="/Olympus-ws/Olympus-USD/Eurepus/Eurepus_instanceable.usd",
             name="Eurepus",
         )
 
@@ -239,9 +239,9 @@ class OlympusTask(RLTask):
             (
                 motor_joint_pos,
                 motor_joint_vel,
-                #orient_error.view(-1, 1),
-                pole_pos,
-                pole_vel,
+                orient_error.unsqueeze(-1),
+                # base_pitch,
+                base_angular_vel_pitch,
                 # ang_velocity,
             ),
             dim=-1,
@@ -406,7 +406,7 @@ class OlympusTask(RLTask):
         dof_pos = self._random_leg_positions(num_resets, env_ids)
 
         pole_pos = torch.rand(num_resets, device=self._device) * 2 * torch.pi - torch.pi
-        dof_pos[:, 0] = pole_pos
+        # dof_pos[:, 0] = pole_pos
             
         self._olympusses.set_joint_positions(dof_pos, indices)
 
@@ -431,6 +431,16 @@ class OlympusTask(RLTask):
         self._Kd_rand = self._Kd + self._Kd*random_factors_Kd * self._domain_rand_percentage
 
         # Reset base position and velocity
+
+        rand_rot = quat_from_euler_xyz(
+            roll=torch.zeros_like(pole_pos), pitch=pole_pos, yaw=torch.zeros_like(pole_pos)
+        )
+        
+        self._olympusses.set_world_poses(
+            self.initial_root_pos[env_ids].clone(),
+            rand_rot,
+            indices,
+        )
         base_vel = torch.zeros((num_resets, 6), device=self._device)
         self._olympusses.set_velocities(base_vel, indices)
 
@@ -444,10 +454,12 @@ class OlympusTask(RLTask):
         self.last_motor_joint_vel[env_ids] = 0.0
 
     def calculate_metrics(self) -> None:
+        base_position, base_rotation = self._olympusses.get_world_poses(clone=False)
 
         # rew_{orient}
-        pole_pos = self._olympusses.get_joint_positions(clone=False, joint_indices=[0]).squeeze(-1)
-        orient_error = torch.abs(pole_pos)
+        roll, pitch, yaw = get_euler_xyz(base_rotation)
+        # pole_pos = self._olympusses.get_joint_positions(clone=False, joint_indices=[0]).squeeze(-1)
+        orient_error = torch.abs(pitch)
         rew_orient = torch.exp(-orient_error / 0.7) * self._rew_scales["r_orient"]
 
         # rew_integral
@@ -826,6 +838,7 @@ class OlympusTask(RLTask):
         self.time_out_buf = torch.zeros_like(self.reset_buf)
 
         # Initialise envs
+        self.initial_root_pos, self.initial_root_rot = self._olympusses.get_world_poses()
         indices = torch.arange(self._olympusses.count, dtype=torch.int64, device=self._device)
         self.reset_idx(indices)
 

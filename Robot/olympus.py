@@ -65,7 +65,7 @@ class Olympus(Robot):
         )
 
         self._dof_names = [
-            "PoleJoint",
+            # "PoleJoint",
             "LateralMotor_FL",
             "LateralMotor_BR",
             "LateralMotor_BL",
