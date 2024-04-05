@@ -10,18 +10,18 @@ env:
   clipObservations: 1000.0
   clipActions: 1000.0
 
-  controlFrequencyInv: 32
+  controlFrequencyInv: 24
 
 
   RLSetup:
-      num_observations        : 9
-      num_actions             : 8
+      num_observations        : 26
+      num_actions             : 12
       num_articulated_joints  : 21
 
   control:
     # PD Drive parameters:
-    stiffness: 2 # [N*m/rad]
-    damping: 0.04     # [N*m*s/rad]
+    stiffness: 7.86 # [N*m/rad]
+    damping: 0.46   # [N*m*s/rad]
 
     # Motor characteristics:
     torque_speed_coefficients: [-0.11, 2] #[-1.90985931929, 72]
@@ -85,7 +85,7 @@ env:
     rOrientRewardTemp         : 0.7 #0.3 #0.5
 
     # episode length in seconds
-    episodeLength_s: 20
+    episodeLength_s: 15
 
 sim:
   dt: 0.00208
