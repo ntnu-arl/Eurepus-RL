@@ -6,14 +6,14 @@ task:
     envSpacing: 4.0
     clipObservations: 1000.0
     clipActions: 1000.0
-    controlFrequencyInv: 32
+    controlFrequencyInv: 4
     RLSetup:
       num_observations: 18
       num_actions: 8
       num_articulated_joints: 21
     control:
-      stiffness: 4.32
-      damping: 0.34
+      stiffness: 7.86
+      damping: 0.46
       torque_speed_coefficients:
       - -0.11
       - 2
@@ -67,9 +67,9 @@ task:
         r_regularize: 0.002
       cNumberOfLevels: 1
       cNextLevelThreshold: 5
-      angleErrorThreshold: 2
+      angleErrorThreshold: 4
       rOrientRewardTemp: 0.7
-      episodeLength_s: 20
+      episodeLength_s: 6
   sim:
     dt: 0.00208
     use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
@@ -179,8 +179,8 @@ train:
       kl_threshold: 0.008
       truncate_grads: true
       grad_norm: 10.0
-      horizon_length: 75
-      minibatch_size: 61440
+      horizon_length: 48
+      minibatch_size: 32768
       mini_epochs: 5
       critic_coef: 2
       clip_value: false
@@ -197,7 +197,7 @@ task_name: ${task.name}
 experiment: ''
 RL_task: 3D
 num_envs: ''
-seed: 2322
+seed: 4479
 torch_deterministic: false
 max_iterations: ''
 physics_engine: physx

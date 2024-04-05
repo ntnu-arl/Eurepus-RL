@@ -10,7 +10,7 @@ env:
   clipObservations: 1000.0
   clipActions: 1000.0
 
-  controlFrequencyInv: 24
+  controlFrequencyInv: 4 #300: 24, 500: 16
 
 
   RLSetup:
@@ -20,11 +20,11 @@ env:
 
   control:
     # PD Drive parameters:
-    stiffness: 4.32 # [N*m/rad]
-    damping: 0.34     # [N*m*s/rad]
+    stiffness: 7.86  #4.32 #2.16 #3.93 # [N*m/rad]
+    damping: 0.46 #0.34 #0.17 #0.23     # [N*m*s/rad]
 
     # Motor characteristics:
-    torque_speed_coefficients: [-0.11, 2] #[-1.90985931929, 72]
+    torque_speed_coefficients: [-0.11, 2] 
     max_torque: 2 # [N*m]
 
   defaultJointAngles:  # = target angles when action = 0.0
@@ -79,13 +79,13 @@ env:
     cNextLevelThreshold       : 5 # How many times the current level has to be succesfully done in a row before next level is unlocked
     
     # Is succesful threshold -> determines when a level is regarded as completed succesfully 
-    angleErrorThreshold       : 2 # in degress
+    angleErrorThreshold       : 4 # in degress
 
     # temperatures
     rOrientRewardTemp         : 0.7 #0.3 #0.5
 
     # episode length in seconds
-    episodeLength_s: 13
+    episodeLength_s: 6 #[300: 13, 500: 8]
 
 sim:
   dt: 0.00208

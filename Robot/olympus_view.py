@@ -58,8 +58,8 @@ class OlympusView(ArticulationView):
             prim_paths_expr="/World/envs/.*/Eurepus/Body",
             name="body_view",
             reset_xform_properties=False,
-            track_contact_forces=track_contact_forces,
-            prepare_contact_sensors=prepare_contact_sensors,
+            track_contact_forces=True,
+            prepare_contact_sensors=True,
         )
 
         self.MotorHousing_FL = RigidPrimView(
@@ -276,5 +276,5 @@ class OlympusView(ArticulationView):
         for rigid_prim in self.rigid_prims:
             forces: Tensor = rigid_prim.get_net_contact_forces(clone=False)
             prim_in_collision = (forces.abs() > 1e-5).any(dim=-1)
-            coll_buf = coll_buf.logical_or(prim_in_collision)
+            coll_buf = coll_buf.logical_or(prim_in_collision)  
         return coll_buf
