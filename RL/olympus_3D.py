@@ -87,7 +87,7 @@ class OlympusTask(RLTask):
         self._domain_rand_percentage = 0.5
 
         # guidance
-        self._max_velocity = 700 * torch.pi/180  #[rad/s]
+        self._max_velocity = 300 * torch.pi/180  #[rad/s]
         self._guidance_c = 1
         self._guidance_w = 30
 
@@ -136,7 +136,7 @@ class OlympusTask(RLTask):
 
         olympus = Olympus(
             prim_path=self.default_zero_env_path + "/Eurepus",
-            usd_path="/Olympus-ws/Olympus-USD/Eurepus/Eurepus_instanceable.usd",
+            usd_path="/Olympus-ws/Olympus-USD/Eurepus/Eurepus_instanceable_40g.usd",
             name="Eurepus",
         )
 
@@ -218,15 +218,19 @@ class OlympusTask(RLTask):
         base_pitch[base_pitch > torch.pi] -= 2 * torch.pi
         base_angular_vel_pitch = base_angular_vel_pitch.unsqueeze(dim=-1)
 
-        # Get absolut error
+        # Get absolute error
         base_target = self._zero_rot
         orient_error = quat_diff_rad(base_rotation, base_target)
+
+        # sample noise
+        position_noise = torch.randn_like(motor_joint_pos) * 5 * torch.pi / 180
+        velocity_noise = torch.randn_like(motor_joint_vel) * 20 * torch.pi / 180
 
         # Concatenate observations
         obs = torch.cat(
             (
-                motor_joint_pos,
-                motor_joint_vel,
+                motor_joint_pos + self._measurement_bias + position_noise,
+                motor_joint_vel + velocity_noise,
                 base_rotation,
                 ang_velocity,
             ),
@@ -254,7 +258,7 @@ class OlympusTask(RLTask):
                     + 0.5 * (self._motor_joint_upper_targets_limits + self._motor_joint_lower_targets_limits).view(1, -1)
         
         interpol_coeff = torch.exp(-self._last_orient_error**2 / 0.001).unsqueeze(-1)
-        self.current_policy_targets = (1 - interpol_coeff) * new_targets + interpol_coeff* self._olympusses.get_joint_positions(clone=True, joint_indices=self.actuated_idx)
+        self.current_policy_targets = (1 - interpol_coeff) * new_targets + interpol_coeff* (self._olympusses.get_joint_positions(clone=True, joint_indices=self.actuated_idx) + self._measurement_bias)
 
         # clamp targets to avoid self collisions
         self.current_clamped_targets = self._clamp_joint_angels(self.current_policy_targets)
@@ -409,10 +413,13 @@ class OlympusTask(RLTask):
         )
 
         # Domain randomisation control parameters
-        random_factors_Kp = (torch.rand(self._num_envs, 1, device=self._device) - 0.5)*2
-        random_factors_Kd = (torch.rand(self._num_envs, 1, device=self._device) - 0.5)*2
-        self._Kp_rand = self._Kp + self._Kp*random_factors_Kp * self._domain_rand_percentage
-        self._Kd_rand = self._Kd + self._Kd*random_factors_Kd * self._domain_rand_percentage
+        random_factors_Kp = (torch.rand(num_resets, 1, device=self._device) - 0.5)*2
+        random_factors_Kd = (torch.rand(num_resets, 1, device=self._device) - 0.5)*2
+        self._Kp_rand[indices] = self._Kp + self._Kp*random_factors_Kp * self._domain_rand_percentage
+        self._Kd_rand[indices] = self._Kd + self._Kd*random_factors_Kd * self._domain_rand_percentage
+
+        # sample measurement bias
+        self._measurement_bias[indices] = (torch.rand(num_resets, len(self.actuated_idx), device=self._device) * 2 - 1) * 2 * torch.pi / 180
 
         # Reset base position and velocity
 
@@ -789,7 +796,9 @@ class OlympusTask(RLTask):
         self._old_targets = torch.zeros((self._num_envs, self._num_actuated), device=self._device)
         self._old_clamped_targets = torch.zeros((self._num_envs, self._num_actuated), device=self._device)
         self._old_guidance_velocity = torch.zeros((self._num_envs, self._num_actuated), device=self._device)
-        
+
+        # observation noise
+        self._measurement_bias = torch.zeros((self._num_envs, len(self.actuated_idx)), device=self._device)
 
         self.actions = torch.zeros(
             self._num_envs,
