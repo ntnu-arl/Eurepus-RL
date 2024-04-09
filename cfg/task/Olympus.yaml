@@ -10,7 +10,7 @@ env:
   clipObservations: 1000.0
   clipActions: 1000.0
 
-  controlFrequencyInv: 4 #300: 24, 500: 16
+  controlFrequencyInv: 24 #300: 24, 500: 16
 
 
   RLSetup:
@@ -85,7 +85,7 @@ env:
     rOrientRewardTemp         : 0.7 #0.3 #0.5
 
     # episode length in seconds
-    episodeLength_s: 6 #[300: 13, 500: 8]
+    episodeLength_s: 13 #[300: 13, 500: 8]
 
 sim:
   dt: 0.00208

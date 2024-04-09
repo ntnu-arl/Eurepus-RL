@@ -87,7 +87,7 @@ class OlympusTask(RLTask):
         self._domain_rand_percentage = 0.5
 
         # guidance 
-        self._max_velocity = 1090 * torch.pi/180  #[rad/s]
+        self._max_velocity = 300 * torch.pi/180  #[rad/s]
         self._guidance_c = 1
         self._guidance_w = 30
 
@@ -601,28 +601,6 @@ class OlympusTask(RLTask):
 
         # Reset buf might already be set to 1 if nan values are detected
         self.reset_buf = torch.logical_or(reset, self.reset_buf)
-
-    def post_physics_step(self):
-        """Processes computations for observations, states, rewards, resets, and extras.
-            Also maintains progress buffer for tracking step count per environment.
-
-        Returns:
-            obs_buf(torch.Tensor): Tensor of observation data.
-            rew_buf(torch.Tensor): Tensor of rewards data.
-            reset_buf(torch.Tensor): Tensor of resets/dones data.
-            extras(dict): Dictionary of extras data.
-        """
-
-        self.progress_buf[:] += 1
-
-        if self._env._world.is_playing():
-            self.is_done()
-            self.calculate_metrics()
-            self.get_observations()
-            self.get_states()
-            self.get_extras()
-
-        return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
 
     def _clamp_joint_angels(self, joint_targets):
         joint_targets = joint_targets.clamp(
