@@ -47,7 +47,7 @@ class OlympusView(ArticulationView):
         super().__init__(prim_paths_expr=prim_paths_expr, name=name, reset_xform_properties=False)
 
         self._knees = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/.*Thigh.*",
+            prim_paths_expr="/World/envs/.*/Olympus/.*Thigh.*",
             name="knees_view",
             reset_xform_properties=False,
             track_contact_forces=track_contact_forces,
@@ -55,7 +55,7 @@ class OlympusView(ArticulationView):
         )
 
         self._base = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/Body",
+            prim_paths_expr="/World/envs/.*/Olympus/Body",
             name="body_view",
             reset_xform_properties=False,
             track_contact_forces=True,
@@ -63,35 +63,35 @@ class OlympusView(ArticulationView):
         )
 
         self.MotorHousing_FL = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/MotorHousing_FL",
+            prim_paths_expr="/World/envs/.*/Olympus/MotorHousing_FL",
             name="MotorHousing_FL",
             reset_xform_properties=False,
             track_contact_forces=True,
             prepare_contact_sensors=True,
         )
         self.FrontMotor_FL = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/FrontThigh_FL",
+            prim_paths_expr="/World/envs/.*/Olympus/FrontThigh_FL",
             name="FrontMotor_FL",
             reset_xform_properties=False,
             track_contact_forces=True,
             prepare_contact_sensors=True,
         )
         self.BackMotor_FL = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/BackThigh_FL",
+            prim_paths_expr="/World/envs/.*/Olympus/BackThigh_FL",
             name="BackMotor_FL",
             reset_xform_properties=False,
             track_contact_forces=True,
             prepare_contact_sensors=True,
         )
         self.FrontKnee_FL = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/FrontShank_FL",
+            prim_paths_expr="/World/envs/.*/Olympus/FrontShank_FL",
             name="FrontKnee_FL",
             reset_xform_properties=False,
             track_contact_forces=True,
             prepare_contact_sensors=True,
         )
         self.BackKnee_FL = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/BackShank_FL",
+            prim_paths_expr="/World/envs/.*/Olympus/BackShank_FL",
             name="BackKnee_FL",
             reset_xform_properties=False,
             track_contact_forces=True,
@@ -99,35 +99,35 @@ class OlympusView(ArticulationView):
         )
 
         self.MotorHousing_FR = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/MotorHousing_FR",
+            prim_paths_expr="/World/envs/.*/Olympus/MotorHousing_FR",
             name="MotorHousing_FR",
             reset_xform_properties=False,
             track_contact_forces=True,
             prepare_contact_sensors=True,
         )
         self.FrontMotor_FR = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/FrontThigh_FR",
+            prim_paths_expr="/World/envs/.*/Olympus/FrontThigh_FR",
             name="FrontMotor_FR",
             reset_xform_properties=False,
             track_contact_forces=True,
             prepare_contact_sensors=True,
         )
         self.BackMotor_FR = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/BackThigh_FR",
+            prim_paths_expr="/World/envs/.*/Olympus/BackThigh_FR",
             name="BackMotor_FR",
             reset_xform_properties=False,
             track_contact_forces=True,
             prepare_contact_sensors=True,
         )
         self.FrontKnee_FR = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/FrontShank_FR",
+            prim_paths_expr="/World/envs/.*/Olympus/FrontShank_FR",
             name="FrontKnee_FR",
             reset_xform_properties=False,
             track_contact_forces=True,
             prepare_contact_sensors=True,
         )
         self.BackKnee_FR = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/BackShank_FR",
+            prim_paths_expr="/World/envs/.*/Olympus/BackShank_FR",
             name="BackKnee_FR",
             reset_xform_properties=False,
             track_contact_forces=True,
@@ -135,35 +135,35 @@ class OlympusView(ArticulationView):
         )
 
         self.MotorHousing_BL = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/MotorHousing_BL",
+            prim_paths_expr="/World/envs/.*/Olympus/MotorHousing_BL",
             name="MotorHousing_BL",
             reset_xform_properties=False,
             track_contact_forces=True,
             prepare_contact_sensors=True,
         )
         self.FrontMotor_BL = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/FrontThigh_BL",
+            prim_paths_expr="/World/envs/.*/Olympus/FrontThigh_BL",
             name="FrontMotor_BL",
             reset_xform_properties=False,
             track_contact_forces=True,
             prepare_contact_sensors=True,
         )
         self.BackMotor_BL = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/BackThigh_BL",
+            prim_paths_expr="/World/envs/.*/Olympus/BackThigh_BL",
             name="BackMotor_BL",
             reset_xform_properties=False,
             track_contact_forces=True,
             prepare_contact_sensors=True,
         )
         self.FrontKnee_BL = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/FrontShank_BL",
+            prim_paths_expr="/World/envs/.*/Olympus/FrontShank_BL",
             name="FrontKnee_BL",
             reset_xform_properties=False,
             track_contact_forces=True,
             prepare_contact_sensors=True,
         )
         self.BackKnee_BL = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/BackShank_BL",
+            prim_paths_expr="/World/envs/.*/Olympus/BackShank_BL",
             name="BackKnee_BL",
             reset_xform_properties=False,
             track_contact_forces=True,
@@ -171,68 +171,68 @@ class OlympusView(ArticulationView):
         )
 
         self.MotorHousing_BR = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/MotorHousing_BR",
+            prim_paths_expr="/World/envs/.*/Olympus/MotorHousing_BR",
             name="MotorHousing_BR",
             reset_xform_properties=False,
             track_contact_forces=True,
             prepare_contact_sensors=True,
         )
         self.FrontMotor_BR = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/FrontThigh_BR",
+            prim_paths_expr="/World/envs/.*/Olympus/FrontThigh_BR",
             name="FrontMotor_BR",
             reset_xform_properties=False,
             track_contact_forces=True,
             prepare_contact_sensors=True,
         )
         self.BackMotor_BR = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/BackThigh_BR",
+            prim_paths_expr="/World/envs/.*/Olympus/BackThigh_BR",
             name="BackMotor_BR",
             reset_xform_properties=False,
             track_contact_forces=True,
             prepare_contact_sensors=True,
         )
         self.FrontKnee_BR = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/FrontShank_BR",
+            prim_paths_expr="/World/envs/.*/Olympus/FrontShank_BR",
             name="FrontKnee_BR",
             reset_xform_properties=False,
             track_contact_forces=True,
             prepare_contact_sensors=True,
         )
         self.BackKnee_BR = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/BackShank_BR",
+            prim_paths_expr="/World/envs/.*/Olympus/BackShank_BR",
             name="BackKnee_BR",
             reset_xform_properties=False,
             track_contact_forces=True,
             prepare_contact_sensors=True,
         )
-        self.Mass_BR = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/Mass_BR",
-            name="Mass_BR",
-            reset_xform_properties=False,
-            track_contact_forces=True,
-            prepare_contact_sensors=True,
-        )
-        self.Mass_BL = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/Mass_BL",
-            name="Mass_BL",
-            reset_xform_properties=False,
-            track_contact_forces=True,
-            prepare_contact_sensors=True,
-        )
-        self.Mass_FR = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/Mass_FR",
-            name="Mass_FR",
-            reset_xform_properties=False,
-            track_contact_forces=True,
-            prepare_contact_sensors=True,
-        )
-        self.Mass_FL = RigidPrimView(
-            prim_paths_expr="/World/envs/.*/Eurepus/Mass_FL",
-            name="Mass_FL",
-            reset_xform_properties=False,
-            track_contact_forces=True,
-            prepare_contact_sensors=True,
-        )
+        # self.Mass_BR = RigidPrimView(
+        #     prim_paths_expr="/World/envs/.*/Olympus/Mass_BR",
+        #     name="Mass_BR",
+        #     reset_xform_properties=False,
+        #     track_contact_forces=True,
+        #     prepare_contact_sensors=True,
+        # )
+        # self.Mass_BL = RigidPrimView(
+        #     prim_paths_expr="/World/envs/.*/Olympus/Mass_BL",
+        #     name="Mass_BL",
+        #     reset_xform_properties=False,
+        #     track_contact_forces=True,
+        #     prepare_contact_sensors=True,
+        # )
+        # self.Mass_FR = RigidPrimView(
+        #     prim_paths_expr="/World/envs/.*/Olympus/Mass_FR",
+        #     name="Mass_FR",
+        #     reset_xform_properties=False,
+        #     track_contact_forces=True,
+        #     prepare_contact_sensors=True,
+        # )
+        # self.Mass_FL = RigidPrimView(
+        #     prim_paths_expr="/World/envs/.*/Olympus/Mass_FL",
+        #     name="Mass_FL",
+        #     reset_xform_properties=False,
+        #     track_contact_forces=True,
+        #     prepare_contact_sensors=True,
+        # )
 
         self.rigid_prims = [
             self.MotorHousing_FL,
@@ -255,10 +255,10 @@ class OlympusView(ArticulationView):
             self.BackMotor_BR,
             self.FrontKnee_BR,
             self.BackKnee_BR,
-            self.Mass_BR,
-            self.Mass_BL,
-            self.Mass_FR,
-            self.Mass_FL,
+            # self.Mass_BR,
+            # self.Mass_BL,
+            # self.Mass_FR,
+            # self.Mass_FL,
         ]
 
     def get_knee_transforms(self):

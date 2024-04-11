@@ -16,7 +16,7 @@ env:
   RLSetup:
       num_observations        : 18
       num_actions             : 8
-      num_articulated_joints  : 21
+      num_articulated_joints  : 20
 
   control:
     # PD Drive parameters:

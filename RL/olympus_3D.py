@@ -123,7 +123,7 @@ class OlympusTask(RLTask):
     def set_up_scene(self, scene) -> None:
         self.get_olympus()
         super().set_up_scene(scene, replicate_physics=False)
-        self._olympusses = OlympusView(prim_paths_expr="/World/envs/.*/Eurepus/Body", name="olympusview")
+        self._olympusses = OlympusView(prim_paths_expr="/World/envs/.*/Olympus/Body", name="olympusview")
 
         scene.add(self._olympusses)
         scene.add(self._olympusses._knees)
@@ -138,15 +138,15 @@ class OlympusTask(RLTask):
         # Configure olympus robot instance
 
         olympus = Olympus(
-            prim_path=self.default_zero_env_path + "/Eurepus",
-            usd_path="/Olympus-ws/Olympus-USD/Eurepus/Eurepus_instanceable_pole_pitch.usd",
-            name="Eurepus",
+            prim_path=self.default_zero_env_path + "/Olympus",
+            usd_path="/home/grzegorz/workspaces/Olympus-USD/Olympus/v3/olympus_v3_instanceable.usd",
+            name="Olympus",
         )
 
         self._sim_config.apply_articulation_settings(
-            "Eurepus",
+            "Olympus",
             get_prim_at_path(olympus.prim_path),
-            self._sim_config.parse_actor_config("Eurepus"),
+            self._sim_config.parse_actor_config("Olympus"),
         )
 
         actuated_paths = []

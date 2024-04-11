@@ -103,7 +103,7 @@ def parse_hydra_configs(cfg: DictConfig):
         sim_device=cfg.device_id,
         enable_livestream=cfg.enable_livestream,
         enable_viewport=enable_viewport,
-        stream_type=cfg.stream_type,
+        # stream_type=cfg.stream_type,
     )
 
     # ensure checkpoints can be specified as relative paths
