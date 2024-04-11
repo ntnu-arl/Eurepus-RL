@@ -156,27 +156,15 @@ class OlympusTask(RLTask):
             actuated_paths.append(f"MotorHousing_{quadrant}/BackTransversalMotor_{quadrant}")
 
         for actuated_path in actuated_paths:
-            if "Lateral" in actuated_path:
-                set_drive(
-                    f"{olympus.prim_path}/{actuated_path}",
-                    "angular",
-                    "position",
-                    0,
-                    self._Kp,
-                    self._Kd, 
-                    self._max_torque,
-                )
-
-            else:
-                set_drive(
-                    f"{olympus.prim_path}/{actuated_path}",
-                    "angular",
-                    "position",
-                    0,
-                    0, #self._Kp,
-                    0.01, #self._Kd, 
-                    1000000 #self._max_torque,
-                )
+            set_drive(
+                f"{olympus.prim_path}/{actuated_path}",
+                "angular",
+                "position",
+                0,
+                0, #self._Kp,
+                0.01, #self._Kd, 
+                1000000 #self._max_torque,
+            )
 
         # Indexing of default joint angles
 
@@ -188,7 +176,7 @@ class OlympusTask(RLTask):
         )
 
         self.default_actuated_joints_pos = torch.zeros(
-            (self._num_envs, self._num_actions+4),  
+            (self._num_envs, self._num_actions),  
             dtype=torch.float,
             device=self.device,
             requires_grad=False,
@@ -213,8 +201,8 @@ class OlympusTask(RLTask):
 
     def get_observations(self) -> dict: 
         # Read motor observations
-        motor_joint_pos = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_transversal_idx)
-        motor_joint_vel = self._olympusses.get_joint_velocities(clone=False, joint_indices=self.actuated_transversal_idx)
+        motor_joint_pos = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
+        motor_joint_vel = self._olympusses.get_joint_velocities(clone=False, joint_indices=self.actuated_idx)
 
         pole_pos = self._olympusses.get_joint_positions(clone=False, joint_indices=[0])
         pole_vel = self._olympusses.get_joint_velocities(clone=False, joint_indices=[0])
@@ -233,25 +221,21 @@ class OlympusTask(RLTask):
         base_pitch[base_pitch > torch.pi] -= 2 * torch.pi
         base_angular_vel_pitch = base_angular_vel_pitch.unsqueeze(dim=-1)
 
-        # Get absolut error
+        # Get absolute error
         base_target = self._zero_rot
         orient_error = quat_diff_rad(base_rotation, base_target)
 
         # sample noise
         position_noise = torch.randn_like(motor_joint_pos) * 5 * torch.pi / 180
         velocity_noise = torch.randn_like(motor_joint_vel) * 20 * torch.pi / 180
-        pole_pos_noise = torch.randn_like(pole_pos) * 2 * torch.pi / 180
-        pole_vel_noise = torch.randn_like(pole_vel) * 2 * torch.pi / 180
 
         # Concatenate observations
         obs = torch.cat(
             (
                 motor_joint_pos + self._measurement_bias + position_noise,
                 motor_joint_vel + velocity_noise,
-                #orient_error.view(-1, 1),
-                pole_pos + pole_pos_noise,
-                pole_vel + pole_vel_noise,
-                # ang_velocity,
+                base_rotation,
+                ang_velocity,
             ),
             dim=-1,
         )
@@ -267,32 +251,28 @@ class OlympusTask(RLTask):
         """
         Apply control signals to the quadrupeds.
         """
-        transversal_targets = actions.clone()
-        lateral_targets = torch.zeros((self._num_envs, 4), device=self._device)
-        pos_target = torch.cat((lateral_targets, transversal_targets), dim=-1)
+        pos_target = actions.clone()
+        # lateral_targets = torch.zeros((self._num_envs, 4), device=self._device)
+        # pos_target = torch.cat((lateral_targets, transversal_targets), dim=-1)
         # pos_target = transversal_targets
 
         # lineraly interpolate between min and max
         new_targets = 0.5 * pos_target * (self._motor_joint_upper_targets_limits - self._motor_joint_lower_targets_limits).view(1, -1) \
                     + 0.5 * (self._motor_joint_upper_targets_limits + self._motor_joint_lower_targets_limits).view(1, -1)
         
-        interpol_coeff = torch.exp(-self._last_orient_error**2 / 0.002).unsqueeze(-1)
-        motor_poses = self._olympusses.get_joint_positions(clone=True, joint_indices=self.actuated_idx)
-        motor_poses[:, 4:] += self._measurement_bias
-        self.current_policy_targets = (1 - interpol_coeff) * new_targets + interpol_coeff * motor_poses
+        interpol_coeff = torch.exp(-self._last_orient_error**2 / 0.001).unsqueeze(-1)
+        self.current_policy_targets = (1 - interpol_coeff) * new_targets + interpol_coeff* (self._olympusses.get_joint_positions(clone=True, joint_indices=self.actuated_idx) + self._measurement_bias)
 
         # clamp targets to avoid self collisions
         self.current_clamped_targets = self._clamp_joint_angels(self.current_policy_targets)
-        self.current_clamped_targets[:,:4] = torch.zeros_like(self.current_clamped_targets[:,:4])
 
         # Velocity controlled guidance module
         # self.velocity_controlled_guidance_module()
-        # self.low_pass_guidance_module()
-        # self.low_pass_guidance_second_order_module()
+        self.low_pass_guidance_second_order_module()
 
-        # # Set efforts directly
-        # self._last_efforts = self._motor_controller(self._targets)
-        # self._olympusses.set_joint_efforts(self._last_efforts[:,4:], joint_indices=self.actuated_transversal_idx)
+        # Set efforts directly
+        self._last_efforts = self._motor_controller(self._targets)
+        self._olympusses.set_joint_efforts(self._last_efforts, joint_indices=self.actuated_idx)
     
     def _motor_controller(self, targets):
         motor_poses = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
@@ -391,7 +371,7 @@ class OlympusTask(RLTask):
         # self.velocity_controlled_guidance_module()
         self.low_pass_guidance_second_order_module()
         self._last_efforts = self._motor_controller(self._targets)
-        self._olympusses.set_joint_efforts(self._last_efforts[:,4:], joint_indices=self.actuated_transversal_idx)
+        self._olympusses.set_joint_efforts(self._last_efforts, joint_indices=self.actuated_idx)
 
     def post_physics_step(self):
         """ Processes RL required computations for observations, states, rewards, resets, and extras.
@@ -422,13 +402,13 @@ class OlympusTask(RLTask):
         indices = env_ids.to(dtype=torch.int32)
         
         # Reset joint positions
-        # if self._cfg["test"]:
-        # dof_pos = self.default_articulatekd_joints_pos[env_ids]  
-        # else:
-        dof_pos = self._random_leg_positions(num_resets, env_ids)
+        if self._cfg["test"]:
+            dof_pos = self.default_articulated_joints_pos[env_ids]  
+        else:
+            dof_pos = self._random_leg_positions(num_resets, env_ids)
 
         pole_pos = torch.rand(num_resets, device=self._device) * 2 * torch.pi - torch.pi
-        dof_pos[:, 0] = pole_pos
+        # dof_pos[:, 0] = pole_pos
             
         self._olympusses.set_joint_positions(dof_pos, indices)
 
@@ -453,9 +433,20 @@ class OlympusTask(RLTask):
         self._Kd_rand[indices] = self._Kd + self._Kd*random_factors_Kd * self._domain_rand_percentage
 
         # sample measurement bias
-        self._measurement_bias[indices] = (torch.rand(num_resets, len(self.actuated_transversal_idx), device=self._device) * 2 - 1) * 2 * torch.pi / 180
+        self._measurement_bias[indices] = (torch.rand(num_resets, len(self.actuated_idx), device=self._device) * 2 - 1) * 2 * torch.pi / 180
 
         # Reset base position and velocity
+
+        # rand_rot = quat_from_euler_xyz(
+        #     roll=torch.zeros_like(pole_pos), pitch=pole_pos, yaw=torch.zeros_like(pole_pos)
+        # )
+        rand_rot = self._random_quaternion(num_resets)
+        
+        self._olympusses.set_world_poses(
+            self.initial_root_pos[env_ids].clone(),
+            rand_rot,
+            indices,
+        )
         base_vel = torch.zeros((num_resets, 6), device=self._device)
         self._olympusses.set_velocities(base_vel, indices)
 
@@ -469,10 +460,11 @@ class OlympusTask(RLTask):
         self.last_motor_joint_vel[env_ids] = 0.0
 
     def calculate_metrics(self) -> None:
+        base_position, base_rotation = self._olympusses.get_world_poses(clone=False)
 
         # rew_{orient}
-        pole_pos = self._olympusses.get_joint_positions(clone=False, joint_indices=[0]).squeeze(-1)
-        orient_error = torch.abs(pole_pos)
+        base_target = self._zero_rot
+        orient_error = torch.abs(quat_diff_rad(base_rotation, base_target))
         rew_orient = torch.exp(-orient_error / 0.7) * self._rew_scales["r_orient"]
 
         # rew_integral
@@ -607,13 +599,13 @@ class OlympusTask(RLTask):
             self._motor_joint_lower_targets_limits, self._motor_joint_upper_targets_limits
         )
 
-        front_pos = joint_targets[:, self.front_transversal_indicies-1]
-        back_pos = joint_targets[:, self.back_transversal_indicies-1]
+        front_pos = joint_targets[:, self.front_transversal_indicies]
+        back_pos = joint_targets[:, self.back_transversal_indicies]
 
         front_pos, back_pos = self._clamp_transversal_angles(front_pos, back_pos)
 
-        joint_targets[:, self.front_transversal_indicies-1] = front_pos
-        joint_targets[:, self.back_transversal_indicies-1] = back_pos
+        joint_targets[:, self.front_transversal_indicies] = front_pos
+        joint_targets[:, self.back_transversal_indicies] = back_pos
         return joint_targets
     
     def _clamp_transversal_angles(self, front_pos, back_pos):
@@ -655,12 +647,12 @@ class OlympusTask(RLTask):
 
         knee_outer, knee_inner, _ = self._forward_kin._calculate_knee_angles(front_transversal.clone(), back_transversal.clone())
 
-        lateral = torch.zeros((num_resets * 4,), device=self._device)
-        # lateral = linear_rescale(
-        #     lateral,
-        #     torch.tensor(-10.0, device=self._device).deg2rad(),
-        #     torch.tensor(100.0, device=self._device).deg2rad(),
-        # )
+        lateral = torch.rand((num_resets * 4,), device=self._device) #torch.zeros((num_resets * 4,), device=self._device)
+        lateral = linear_rescale(
+            lateral,
+            torch.tensor(-50.0, device=self._device).deg2rad(),
+            torch.tensor(110.0, device=self._device).deg2rad(),
+        )
 
         front_transversal = front_transversal.reshape((num_resets, 4))
         back_transversal = back_transversal.reshape((num_resets, 4))
@@ -692,6 +684,8 @@ class OlympusTask(RLTask):
         for i, name in enumerate(self._olympusses.dof_names):
             if not any(item in name for item in ["Knee", "Pole", "World"]):
                 self.actuated_name2idx[name] = i
+        
+        print(self._olympusses.dof_names)
 
         self.actuated_transversal_name2idx = {}
         for i, name in enumerate(self._olympusses.dof_names):
@@ -772,14 +766,15 @@ class OlympusTask(RLTask):
             [self._olympusses.get_dof_index(f"BackKnee_FL"), self._olympusses.get_dof_index(f"BackKnee_BL")]
         )
 
+        print(self.olympus_motor_joint_lower_limits.shape)
+        print(self.back_transversal_indicies)
+        self.olympus_motor_joint_lower_limits[:, self.front_transversal_indicies] = self.transversal_motor_limits[0]
+        self.olympus_motor_joint_lower_limits[:, self.back_transversal_indicies] = self.transversal_motor_limits[0]
+        self.olympus_motor_joint_lower_limits[:, self.lateral_indicies] = self.lateral_motor_limits[0]
 
-        self.olympus_motor_joint_lower_limits[:, self.front_transversal_indicies-1] = self.transversal_motor_limits[0]
-        self.olympus_motor_joint_lower_limits[:, self.back_transversal_indicies-1] = self.transversal_motor_limits[0]
-        self.olympus_motor_joint_lower_limits[:, self.lateral_indicies-1] = self.lateral_motor_limits[0]
-
-        self.olympus_motor_joint_upper_limits[:, self.front_transversal_indicies-1] = self.transversal_motor_limits[1]
-        self.olympus_motor_joint_upper_limits[:, self.back_transversal_indicies-1] = self.transversal_motor_limits[1]
-        self.olympus_motor_joint_upper_limits[:, self.lateral_indicies-1] = self.lateral_motor_limits[1]
+        self.olympus_motor_joint_upper_limits[:, self.front_transversal_indicies] = self.transversal_motor_limits[1]
+        self.olympus_motor_joint_upper_limits[:, self.back_transversal_indicies] = self.transversal_motor_limits[1]
+        self.olympus_motor_joint_upper_limits[:, self.lateral_indicies] = self.lateral_motor_limits[1]
 
         self._motor_joint_upper_targets_limits = self.olympus_motor_joint_upper_limits.clone()  # + 15 * torch.pi / 180
         self._motor_joint_lower_targets_limits = self.olympus_motor_joint_lower_limits.clone()  # - 15 * torch.pi / 180
@@ -795,8 +790,7 @@ class OlympusTask(RLTask):
         self._old_guidance_velocity = torch.zeros((self._num_envs, self._num_actuated), device=self._device)
 
         # observation noise
-        self._measurement_bias = torch.zeros((self._num_envs, len(self.actuated_transversal_idx)), device=self._device)
-        
+        self._measurement_bias = torch.zeros((self._num_envs, len(self.actuated_idx)), device=self._device)
 
         self.actions = torch.zeros(
             self._num_envs,
@@ -825,13 +819,14 @@ class OlympusTask(RLTask):
         )
 
         self.joint_targets_old = torch.zeros(
-            [self._num_envs, self._num_actions+4], 
+            [self._num_envs, self._num_actions], 
             device=self._device
         )
 
         self.time_out_buf = torch.zeros_like(self.reset_buf)
 
         # Initialise envs
+        self.initial_root_pos, self.initial_root_rot = self._olympusses.get_world_poses()
         indices = torch.arange(self._olympusses.count, dtype=torch.int64, device=self._device)
         self.reset_idx(indices)
 
