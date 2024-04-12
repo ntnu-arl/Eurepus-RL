@@ -632,48 +632,32 @@ class OlympusTask(RLTask):
         front_transversal = torch.rand((num_resets * 4,), device=self._device)
         front_transversal = linear_rescale(
             front_transversal,
-            torch.tensor([0], device=self._device).deg2rad(),
-            torch.tensor([130], device=self._device).deg2rad(),
+            torch.tensor(5.0, device=self._device).deg2rad(),
+            torch.tensor(100.0, device=self._device).deg2rad(),
         )
 
         back_transversal = torch.rand((num_resets * 4,), device=self._device)
         back_transversal = linear_rescale(
             back_transversal,
-            torch.tensor([0], device=self._device).deg2rad(),
-            torch.tensor([130], device=self._device).deg2rad(),
+            torch.tensor(5.0, device=self._device).deg2rad(),
+            torch.tensor(100.0, device=self._device).deg2rad(),
         )
 
-        front_transversal, back_transversal = self._clamp_transversal_angles(front_transversal, back_transversal)
+        knee_outer, knee_inner, _ = self._forward_kin._calculate_knee_angles(front_transversal, back_transversal)
 
-        knee_outer, knee_inner, _ = self._forward_kin._calculate_knee_angles(front_transversal.clone(), back_transversal.clone())
-
-        lateral = torch.rand((num_resets * 4,), device=self._device) #torch.zeros((num_resets * 4,), device=self._device)
+        lateral = torch.rand((num_resets * 4,), device=self._device)
         lateral = linear_rescale(
             lateral,
-            torch.tensor(-50.0, device=self._device).deg2rad(),
-            torch.tensor(110.0, device=self._device).deg2rad(),
+            torch.tensor(-100.0, device=self._device).deg2rad(),
+            torch.tensor(10.0, device=self._device).deg2rad(),
         )
-
-        front_transversal = front_transversal.reshape((num_resets, 4))
-        back_transversal = back_transversal.reshape((num_resets, 4))
-        knee_outer = knee_outer.reshape((num_resets, 4))
-        knee_inner = knee_inner.reshape((num_resets, 4))
 
         dof_pos = self.default_articulated_joints_pos[env_ids]
         dof_pos[:, self.actuated_lateral_idx] = lateral.reshape((num_resets, 4))
-        dof_pos[:, self.front_right_transversal_indices] = back_transversal[:, :2]
-        dof_pos[:, self.back_left_transversal_indices] = back_transversal[:, 2:]
-        dof_pos[:, self.front_left_transversal_indices] = front_transversal[:, 2:]
-        dof_pos[:, self.back_right_transversal_indices] = front_transversal[:, :2]
-        dof_pos[:, self.front_right_knee_indices] = knee_inner[:, :2]
-        dof_pos[:, self.back_left_knee_indices] = knee_inner[:, 2:]
-        dof_pos[:, self.front_left_knee_indices] = knee_outer[:, 2:]
-        dof_pos[:, self.back_right_knee_indices] = knee_outer[:, :2]
-
-        # dof_pos[:, self.front_transversal_indicies] = front_transversal.reshape((num_resets, 4))
-        # dof_pos[:, self.back_transversal_indicies] = back_transversal.reshape((num_resets, 4))
-        # dof_pos[:, self._knee_outer_indicies] = knee_outer.reshape((num_resets, 4))
-        # dof_pos[:, self._knee_inner_indicies] = knee_inner.reshape((num_resets, 4))
+        dof_pos[:, self.front_transversal_indicies] = front_transversal.reshape((num_resets, 4))
+        dof_pos[:, self.back_transversal_indicies] = back_transversal.reshape((num_resets, 4))
+        dof_pos[:, self._knee_outer_indicies] = knee_outer.reshape((num_resets, 4))
+        dof_pos[:, self._knee_inner_indicies] = knee_inner.reshape((num_resets, 4))
 
         return dof_pos
 
