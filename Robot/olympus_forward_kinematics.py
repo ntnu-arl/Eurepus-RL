@@ -13,16 +13,16 @@ class OlympusForwardKinematics(torch.jit.ScriptModule):
 
         # Frame positions
         self._front_motor_mhf = torch.tensor([0.0, 0.0, 0.0], device=self._device)
-        self._back_motor_mhf = torch.tensor([-0.03, 0.0, 0.0], device=self._device)
-        self._front_knee_fmf = torch.tensor([0.0, 0.0, -0.090787728245617 ], device=self._device)
-        self._back_knee_bmf = torch.tensor([0, 0, -0.090787728245617 ], device=self._device)
-        self._paw_attachment_fkf = torch.tensor([0.0, 0.0, -0.149610021388943], device=self._device)
-        self._paw_attachment_bkf = torch.tensor([0.0, 0.0, -0.150850919785065], device=self._device)
+        self._back_motor_mhf = torch.tensor([-0.09, 0.0, 0.0], device=self._device)
+        self._front_knee_fmf = torch.tensor([0.0, 0.0, -0.18], device=self._device)
+        self._back_knee_bmf = torch.tensor([0, 0, -0.18], device=self._device)
+        self._paw_attachment_fkf = torch.tensor([0.0124, 0.0, -0.294], device=self._device)
+        self._paw_attachment_bkf = torch.tensor([0.01319, 0.0, -0.30654], device=self._device)
 
         # Initial rotations
         self._y_axis = torch.tensor([0.0, 1.0, 0.0], device=self._device)
-        self._fkf_init = 22.8436828677 * torch.pi / 180
-        self._bkf_init = -24.306859982 * torch.pi / 180
+        self._fkf_init = 3.008 * torch.pi / 180
+        self._bkf_init = -14 * torch.pi / 180
 
     @torch.jit.script_method
     def get_squat_configuration(self, squat_angle: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
@@ -41,8 +41,6 @@ class OlympusForwardKinematics(torch.jit.ScriptModule):
 
     @torch.jit.script_method
     def _calculate_knee_angles(self, q_front: Tensor, q_back: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
-        q_front += 11.0833318278*torch.pi/180
-        q_back += 11.0833318278*torch.pi/180
         rot_fmf = self._rotation_matrix_y(-q_front)
         rot_bmf = self._rotation_matrix_y(q_back)
         front_knee_mhf = self._front_motor_mhf + self._transform_point(rot_fmf, self._front_knee_fmf)
