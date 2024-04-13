@@ -268,11 +268,13 @@ class OlympusTask(RLTask):
 
         # Velocity controlled guidance module
         # self.velocity_controlled_guidance_module()
-        self.low_pass_guidance_second_order_module()
+        # self.low_pass_guidance_second_order_module()
 
         # Set efforts directly
-        self._last_efforts = self._motor_controller(self._targets)
-        self._olympusses.set_joint_efforts(self._last_efforts, joint_indices=self.actuated_idx)
+        # self._last_efforts = self._motor_controller(self._targets)
+        # Set targets
+        self._olympusses.set_joint_position_targets(self.current_clamped_targets, joint_indices=self.actuated_idx)
+        # self._olympusses.set_joint_efforts(self._last_efforts, joint_indices=self.actuated_idx)
     
     def _motor_controller(self, targets):
         motor_poses = self._olympusses.get_joint_positions(clone=False, joint_indices=self.actuated_idx)
