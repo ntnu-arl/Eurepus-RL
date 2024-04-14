@@ -2,15 +2,15 @@ task:
   name: Olympus
   physics_engine: ${..physics_engine}
   env:
-    numEnvs: ${resolve_default:4096,${...num_envs}}
+    numEnvs: 16
     envSpacing: 4.0
     clipObservations: 1000.0
     clipActions: 1000.0
     controlFrequencyInv: 24
     RLSetup:
-      num_observations: 18
-      num_actions: 8
-      num_articulated_joints: 21
+      num_observations: 31
+      num_actions: 12
+      num_articulated_joints: 20
     control:
       stiffness: 7.86
       damping: 0.46
@@ -39,7 +39,6 @@ task:
       BackKnee_FL: 0.0
       BackKnee_BR: 0.0
       BackKnee_BL: 0.0
-      PoleJoint: 0.0
     jointLimits:
       lateralMotor:
       - -50
@@ -152,8 +151,8 @@ train:
           name: default
         regularizer:
           name: None
-    load_checkpoint: false
-    load_path: ''
+    load_checkpoint: ${if:${...checkpoint},True,False}
+    load_path: ${...checkpoint}
     config:
       name: ${resolve_default:Olympus,${....experiment}}
       full_experiment_name: ${.name}
@@ -180,7 +179,7 @@ train:
       truncate_grads: true
       grad_norm: 10.0
       horizon_length: 50
-      minibatch_size: 40960
+      minibatch_size: 960
       mini_epochs: 5
       critic_coef: 2
       clip_value: false
@@ -197,7 +196,7 @@ task_name: ${task.name}
 experiment: ''
 RL_task: 3D
 num_envs: ''
-seed: 985
+seed: 9274
 torch_deterministic: false
 max_iterations: ''
 physics_engine: physx
@@ -208,10 +207,10 @@ rl_device: cuda:0
 multi_gpu: false
 num_threads: 4
 solver_type: 0
-test: false
-checkpoint: ''
-headless: true
-enable_livestream: false
+test: true
+checkpoint: /home/grzegorz/workspaces/in-air-stabilization/runs/Olympus3/nn/Olympus.pth
+headless: false
+enable_livestream: true
 stream_type: webRTC
 mt_timeout: 30
 wandb_activate: false
