@@ -1,0 +1,19 @@
+# Byte-compiled / optimized / DLL files
+*/__pycache__/
+*.py[cod]
+*$py.class
+
+# Project specific
+env/
+*.env
+*.log
+*.sqlite3
+*.pyc
+*.DS_Store
+*/runs/*
+runs
+plots
+Event_Files
+
+# VS Code specific
+.vscode/

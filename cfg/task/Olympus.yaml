@@ -1,0 +1,147 @@
+# used to create the object
+name: Olympus
+
+physics_engine: ${..physics_engine}
+
+env:
+  numEnvs: ${resolve_default:4096,${...num_envs}} #  16, 128, 1280, 2048, 4096
+  envSpacing: 4.  # [m]
+
+  clipObservations: 1000.0
+  clipActions: 1000.0
+
+  controlFrequencyInv: 24
+
+
+  RLSetup:
+      num_observations        : 31
+      num_actions             : 12
+      num_articulated_joints  : 20
+
+  control:
+    # PD Drive parameters:
+    stiffness: 7.86 # [N*m/rad]
+    damping: 0.46    # [N*m*s/rad]
+
+    # Motor characteristics:
+    torque_speed_coefficients: [-0.11, 2] #[-1.90985931929, 72]
+    max_torque: 2 # [N*m]
+
+  defaultJointAngles:  # = target angles when action = 0.0
+    LateralMotor_FL           : 0.00  # [rad]
+    LateralMotor_BR           : 0.00  # [rad]
+    LateralMotor_BL           : 0.00  # [rad]
+    LateralMotor_FR           : 0.00  # [rad]
+    FrontTransversalMotor_FR  : 0.00  # [rad]
+    FrontTransversalMotor_FL  : 0.00  # [rad]
+    FrontTransversalMotor_BR  : 0.00  # [rad]
+    FrontTransversalMotor_BL  : 0.00  # [rad]
+    BackTransversalMotor_FR   : 0.00  # [rad]
+    BackTransversalMotor_FL   : 0.00  # [rad]
+    BackTransversalMotor_BR   : 0.00  # [rad]
+    BackTransversalMotor_BL   : 0.00  # [rad]
+    FrontKnee_FR              : 0.00  # [rad]
+    FrontKnee_FL              : 0.00  # [rad]
+    FrontKnee_BR              : 0.00  # [rad]
+    FrontKnee_BL              : 0.00  # [rad]
+    BackKnee_FR               : 0.00  # [rad]
+    BackKnee_FL               : 0.00  # [rad]
+    BackKnee_BR               : 0.00  # [rad]
+    BackKnee_BL               : 0.00  # [rad]
+  
+  # Joint limits
+  jointLimits:
+    lateralMotor              : [-50, 110]  # [-10, 150]  # [deg]
+    transversalMotor          : [-20, 140]  # [deg]
+    maxTransversalMotorDiff   : -1        # [deg]
+    maxTransversalMotorSum    : 220         # [deg]
+    maxJointVelocity          : 2000.0      # [deg/s]
+
+  learn:
+    rewards:    
+      total                     : 1
+      r_orient                  : 2
+      r_base_acc                : 0
+      r_action_clip             : 0.01
+      r_torque_clip             : 0.000001
+      r_collision               : 0
+      r_is_done                 : 100
+      r_inside_threshold        : 1
+      r_orient_integral         : 0
+      r_joint_acc               : 0
+      r_velocity                : 0.00002
+      r_change_dir              : 0.035
+      r_regularize              : 0.002
+
+    # Curriculum 
+    cNumberOfLevels           : 1
+    cNextLevelThreshold       : 5 # How many times the current level has to be succesfully done in a row before next level is unlocked
+    
+    # Is succesful threshold -> determines when a level is regarded as completed succesfully 
+    angleErrorThreshold       : 2 # in degress
+
+    # temperatures
+    rOrientRewardTemp         : 0.7 #0.3 #0.5
+
+    # episode length in seconds
+    episodeLength_s: 13
+
+sim:
+  dt: 0.00208
+  use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
+  gravity: [0.0, 0.0, 0.0] #-9.81]
+  add_ground_plane: False
+  use_flatcache: True
+  enable_scene_query_support: False
+  disable_contact_processing: True
+
+  # set to True if you use camera sensors in the environment
+  enable_cameras: False
+
+  default_physics_material:
+    static_friction: 1.0
+    dynamic_friction: 1.0
+    restitution: 0.0
+
+  physx:
+    worker_thread_count: ${....num_threads}
+    solver_type: 0 #${....solver_type}
+    use_gpu: ${eq:${....sim_device},"gpu"} # set to False to run on CPU
+    solver_position_iteration_count: 4 
+    solver_velocity_iteration_count: 1 
+    contact_offset: 0.02
+    rest_offset: 0.0
+    bounce_threshold_velocity: 0.2
+    friction_offset_threshold: 0.04
+    friction_correlation_distance: 0.025
+    enable_sleeping: True
+    enable_stabilization: True
+    max_depenetration_velocity: 100.0
+
+    # GPU buffers
+    gpu_max_rigid_contact_count: 524288
+    gpu_max_rigid_patch_count: 163840
+    gpu_found_lost_pairs_capacity: 4194304
+    gpu_found_lost_aggregate_pairs_capacity: 33554432
+    gpu_total_aggregate_pairs_capacity: 4194304
+    gpu_max_soft_body_contacts: 1048576
+    gpu_max_particle_contacts: 1048576
+    gpu_heap_capacity: 134217728
+    gpu_temp_buffer_capacity: 33554432
+    gpu_max_num_partitions: 8
+
+  Olympus:
+    # -1 to use default values
+    override_usd_defaults: False
+    enable_self_collisions: True
+    invert_collision_group_filter: True
+    enable_gyroscopic_forces: True
+    # also in stage params
+    # per-actor
+    solver_position_iteration_count: 4 # 4
+    solver_velocity_iteration_count: 1 # 1
+    sleep_threshold: 0.005 # 0.005  
+    stabilization_threshold: 0.001 # 0.001
+    # per-body
+    density: -1
+    max_depenetration_velocity: 100.0 # 100.0
