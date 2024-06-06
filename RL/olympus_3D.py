@@ -136,7 +136,7 @@ class OlympusTask(RLTask):
 
         olympus = Olympus(
             prim_path=self.default_zero_env_path + "/Eurepus",
-            usd_path="/Olympus-ws/Olympus-USD/Eurepus/Eurepus_instanceable_40g.usd",
+            usd_path="USD/Eurepus_instanceable_80g.usd",
             name="Eurepus",
         )
 
@@ -249,9 +249,6 @@ class OlympusTask(RLTask):
         Apply control signals to the quadrupeds.
         """
         pos_target = actions.clone()
-        # lateral_targets = torch.zeros((self._num_envs, 4), device=self._device)
-        # pos_target = torch.cat((lateral_targets, transversal_targets), dim=-1)
-        # pos_target = transversal_targets
 
         # lineraly interpolate between min and max
         new_targets = 0.5 * pos_target * (self._motor_joint_upper_targets_limits - self._motor_joint_lower_targets_limits).view(1, -1) \
@@ -264,7 +261,6 @@ class OlympusTask(RLTask):
         self.current_clamped_targets = self._clamp_joint_angels(self.current_policy_targets)
 
         # Velocity controlled guidance module
-        # self.velocity_controlled_guidance_module()
         self.low_pass_guidance_second_order_module()
 
         # Set efforts directly
@@ -356,7 +352,6 @@ class OlympusTask(RLTask):
             simulation_time (float): [description]
         """
 
-        # self.velocity_controlled_guidance_module()
         self.low_pass_guidance_second_order_module()
         self._last_efforts = self._motor_controller(self._targets)
         self._olympusses.set_joint_efforts(self._last_efforts, joint_indices=self.actuated_idx)
@@ -423,9 +418,6 @@ class OlympusTask(RLTask):
 
         # Reset base position and velocity
 
-        # rand_rot = quat_from_euler_xyz(
-        #     roll=torch.zeros_like(pole_pos), pitch=pole_pos, yaw=torch.zeros_like(pole_pos)
-        # )
         rand_rot = self._random_quaternion(num_resets)
         
         self._olympusses.set_world_poses(
@@ -678,11 +670,6 @@ class OlympusTask(RLTask):
         dof_pos[:, self.front_left_knee_indices] = knee_outer[:, 2:]
         dof_pos[:, self.back_right_knee_indices] = knee_outer[:, :2]
 
-        # dof_pos[:, self.front_transversal_indicies] = front_transversal.reshape((num_resets, 4))
-        # dof_pos[:, self.back_transversal_indicies] = back_transversal.reshape((num_resets, 4))
-        # dof_pos[:, self._knee_outer_indicies] = knee_outer.reshape((num_resets, 4))
-        # dof_pos[:, self._knee_inner_indicies] = knee_inner.reshape((num_resets, 4))
-
         return dof_pos
 
     def post_reset(self):
@@ -774,8 +761,6 @@ class OlympusTask(RLTask):
             [self._olympusses.get_dof_index(f"BackKnee_FL"), self._olympusses.get_dof_index(f"BackKnee_BL")]
         )
 
-        print(self.olympus_motor_joint_lower_limits.shape)
-        print(self.back_transversal_indicies)
         self.olympus_motor_joint_lower_limits[:, self.front_transversal_indicies] = self.transversal_motor_limits[0]
         self.olympus_motor_joint_lower_limits[:, self.back_transversal_indicies] = self.transversal_motor_limits[0]
         self.olympus_motor_joint_lower_limits[:, self.lateral_indicies] = self.lateral_motor_limits[0]
