@@ -20,5 +20,11 @@ In the train config:
 # USD
 The USD of Eurepus can be found in the USD folder.
 
+# Hardware Files and Control Code
+You can find the following files at [Eurepus-design](https://github.com/ntnu-arl/Eurepus-design): 
+- CAD files of Eurepus (SOLIDWORKS).
+- The deployed controller code for Eurepus.
+- CAD files for the Free Fall and Rotating Pole test setups.
+
 # WIP
 This repository is a work in progress. Efforts will be made to restructure it before publishing it sometime during the fall.
